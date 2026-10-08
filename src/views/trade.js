@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         后台上架自动比价与一键填价助手(可收起隐藏版)
 // @namespace    http://tampermonkey.net/
-// @version      3.7
-// @description  支持面板收起/展开，精准识别太古星星(g:1)，自动匹配部位并实现一键/批量填价
+// @version      4.0
+// @description  支持面板收起/展开，精准识别太古星星(g:1)，匹配词缀字典并实现一键/批量填价（适配两级 API 分类参数）
 // @match        *://*.game7power.com/*
 // @match        *://game7power.com/*
 // @grant        GM_xmlhttpRequest
@@ -16,80 +16,118 @@
 
     const FRONTEND_API = 'https://www.aoeah.com/api/goods';
     let currentMinPrice = 0;
-    let checkedIndex = 0; // 当前翻页/选中索引
-    let isCollapsed = false; // 面板折叠状态
+    let checkedIndex = 0;
+    let isCollapsed = false;
 
-    // 部位名称与前台 API 参数 (tmethod / tmethod2) 的映射字典
-    const SLOT_METHOD_MAP = {
-// 职业 (Classes)
-    'Barbarian':          { tmethod: '601', tmethod2: '202' },
-    'Druid':              { tmethod: '601', tmethod2: '203' },
-    'Necromancer':        { tmethod: '601', tmethod2: '204' },
-    'Rogue':              { tmethod: '601', tmethod2: '205' },
-    'Sorcerer':           { tmethod: '601', tmethod2: '206' },
-    'Spiritborn':         { tmethod: '601', tmethod2: '207' },
-    'Paladin':            { tmethod: '601', tmethod2: '208' },
-    'Warlock':            { tmethod: '601', tmethod2: '209' },
+    // --- 1. 词缀关键字映射字典 ---
+    const d4AffixKeywords = {
+        // 基础属性 (Core Stats)
+        'Maximum Life':                         { key: 'maximum_life', value: 'Maximum Life' },
+        'Willpower':                            { key: 'willpower', value: 'Willpower' },
+        'Strength':                             { key: 'strength', value: 'Strength' },
+        'Dexterity':                            { key: 'dexterity', value: 'Dexterity' },
+        'Intelligence':                         { key: 'intelligence', value: 'Intelligence' },
 
-    // 装备部位 (Equipment Slots)
-    'Helm':               { tmethod: '600', tmethod2: '212' },
-    'Chest Armor':        { tmethod: '600', tmethod2: '213' },
-    'Gloves':             { tmethod: '600', tmethod2: '214' },
-    'Pants':              { tmethod: '600', tmethod2: '215' },
-    'Boots':              { tmethod: '600', tmethod2: '217' },
-    'Amulet':             { tmethod: '601', tmethod2: '218' },
-    'Ring':               { tmethod: '601', tmethod2: '219' },
-    'Shield':             { tmethod: '600', tmethod2: '220' },
-    'Focus':              { tmethod: '600', tmethod2: '221' },
-    'Totem':              { tmethod: '600', tmethod2: '222' },
+        // 伤害与倍率 (Damage & Multipliers)
+        'Weapon Damage':                        { key: 'weapon_damage', value: 'Weapon Damage' },
+        'x Critical Strike Damage Multiplier':  { key: 'crit_damage_mult', value: 'x Critical Strike Damage Multiplier' },
+        'Critical Strike Damage':               { key: 'crit_damage', value: 'Critical Strike Damage' },
+        'Critical Strike Chance':               { key: 'crit_chance', value: 'Critical Strike Chance' },
+        'Overpower Damage':                     { key: 'overpower_damage', value: 'Overpower Damage' },
+        'Vulnerable Damage':                    { key: 'vulnerable_damage', value: 'Vulnerable Damage' },
+        'Attack Speed':                         { key: 'attack_speed', value: 'Attack Speed' },
+        'Cooldown Reduction':                   { key: 'cooldown_reduction', value: 'Bul-Kathos\' Pride: Ancient Skill Cooldown Reduction' },
+        'Resource Cost Reduction':              { key: 'resource_cost_reduction', value: 'Resource Cost Reduction' },
 
-    // 武器类型 (Weapon Types)
-    'Axe':                { tmethod: '600', tmethod2: '223' },
-    'Two-Handed Axe':     { tmethod: '600', tmethod2: '224' },
-    'Mace':               { tmethod: '600', tmethod2: '225' },
-    'Two-Handed Mace':    { tmethod: '600', tmethod2: '226' },
-    'Sword':              { tmethod: '600', tmethod2: '227' },
-    'Two-Handed Sword':   { tmethod: '600', tmethod2: '228' },
-    'Dagger':             { tmethod: '600', tmethod2: '229' },
-    'Wand':               { tmethod: '600', tmethod2: '230' },
-    'Staff':              { tmethod: '600', tmethod2: '231' },
-    'Bow':                { tmethod: '600', tmethod2: '232' },
-    'Crossbow':           { tmethod: '600', tmethod2: '233' },
-    'Scythe':             { tmethod: '600', tmethod2: '234' },
-    'Two-Handed Scythe':  { tmethod: '600', tmethod2: '235' },
-    'Flail':              { tmethod: '600', tmethod2: '236' },
-    'Glaive':             { tmethod: '600', tmethod2: '237' },
-    'Polearm':            { tmethod: '600', tmethod2: '238' },
-    'Quarterstaff':       { tmethod: '600', tmethod2: '239' },
+        'Up a chance Become Berserking':                    { key: 'up_a_chance_become_berserking', value: 'Berserker\'s Crucible:Lucky Hit: Up a  chance Become Berserking' },
 
-    // 宝石与材料 (Gems & Materials)
-    'Amethyst':           { tmethod: '601', tmethod2: '245' },
-    'Diamond':            { tmethod: '601', tmethod2: '246' },
-    'Emerald':            { tmethod: '601', tmethod2: '247' },
-    'Ruby':               { tmethod: '601', tmethod2: '248' },
-    'Sapphire':           { tmethod: '601', tmethod2: '249' },
-    'Skull':              { tmethod: '601', tmethod2: '250' },
-    'Topaz':              { tmethod: '601', tmethod2: '251' },
-    'Elixir':             { tmethod: '601', tmethod2: '255' },
-    'Incense':            { tmethod: '601', tmethod2: '256' },
-    'Iron Chunk':         { tmethod: '601', tmethod2: '257' },
-    'Rawhide':            { tmethod: '601', tmethod2: '258' },
-    'Veiled Crystal':     { tmethod: '601', tmethod2: '259' },
-
-    // 符文与护符 (Runes & Charms)
-    'Rune of Invocation': { tmethod: '601', tmethod2: '261' },
-    'Rune of Ritual':     { tmethod: '601', tmethod2: '262' },
-    'Charm':              { tmethod: '601', tmethod2: '267' },
-    'Set Charm':          { tmethod: '601', tmethod2: '268' },
-    'Mythic Charm':       { tmethod: '601', tmethod2: '269' },
-    'Full 7 Of Set Charms':{ tmethod: '601', tmethod2: '270' },
-    'Horadric Seal':      { tmethod: '601', tmethod2: '266' },
-
-    // 其它 (Other)
-    'Other':              { tmethod: '601', tmethod2: '299' }
+        // 防御与抗性 (Defense & Resistances)
+        'Armor':                                { key: 'armor', value: 'Armor' },
+        'Damage Reduction':                     { key: 'damage_reduction', value: 'Berserker\'s Crucible: Damage Reduction while Berserking' },
+        'All Resistances':                      { key: 'all_resistances', value: 'All Resistances' },
+        'Fire Resistance':                      { key: 'fire_resistance', value: 'Fire Resistance' },
+        'Cold Resistance':                      { key: 'cold_resistance', value: 'Cold Resistance' },
+        'Lightning Resistance':                 { key: 'lightning_resistance', value: 'Lightning Resistance' },
+        'Poison Resistance':                    { key: 'poison_resistance', value: 'Poison Resistance' },
+        'Shadow Resistance':                    { key: 'shadow_resistance', value: 'Shadow Resistance' }
     };
 
-    // --- 1. 从 <tr> 解析商品数据 ---
+    // --- 2. 两级分类/部位映射字典 ---
+    // 第一级大类 (tmethod)
+    const TMETHOD_MAP = {
+        'Lair Boss Keys':           '113',
+        'Resplendent Spark':        '306',
+        'Horadric Cube Materials':  '268',
+        'Legendary':                '500', // 装备/传奇类基础分类
+        'Rare Items':               '600',
+        'Unique Items':             '601',
+        'Annihilus':             '601',
+        'Talisman':                 '700',
+        'Full 7 Of Set Charms':     '800',
+        'Runewords':                '22',
+        'Runes':                    '21',
+        'Unique (Full Affixes)':    '20',
+        'Charms & Set Bonuses':     '301',
+        'Full Roll Aspect':         '19',
+        'Crafting Mythic Runes':    '23',
+        'Mythic Unique (Boost)':    '155',
+        'Gems & Horadric Gems':     '10',
+        'Hot Sale Carry Run':       '305',
+        'Junk For Salvage':         '13',
+        'Materials (Face To Face)': '30'
+    };
+
+    // 第二级部位/类型 (tmethod2)
+    const TMETHOD2_MAP = {
+        'All':                '',
+        'Amulet':             '216',
+        'Axe':                '200',
+        'Boots':              '217',
+        'Bow':                '202',
+        'Charm':              '267',
+        'Chest Armor':        '218',
+        'Crossbow':           '203',
+        'Dagger':             '204',
+        'Flail':              '256',
+        'Focus':              '205',
+        'Glaive':             '239',
+        'Gloves':             '219',
+        'Helm':               '220',
+        'Horadric Seal':      '266',
+        'Mace':               '206',
+        'Other':              '9999',
+        'Pants':              '221',
+        'Polearm':            '208',
+        'Quarterstaff':       '238',
+        'Ring':               '222',
+        'Scythe':             '209',
+        'Shield':             '211',
+        'Staff':              '212',
+         'Sword':              '213',
+         'Totem':              '223',
+         'Two-Handed Axe':              '201',
+         'Two-Handed Mace':              '207',
+         'Two-Handed Scythe':              '210',
+         'Two-Handed Sword':              '214',
+         'Wand':              '215',
+
+    };
+
+    // 匹配词缀名称的辅助函数
+    function matchAffixName(rawText) {
+        // 清理文字前缀（如太古符号、加号、数字等）
+        const cleanText = rawText.replace(/^[\s\*\u2605\u2733\+\d\,\.\%]+/, '').trim();
+
+        // 遍历字典进行关键字精准或包含匹配
+        for (const keyword in d4AffixKeywords) {
+            if (cleanText.includes(keyword)) {
+                return d4AffixKeywords[keyword].value; // 返回标准化词缀名称
+            }
+        }
+        return cleanText; // 若未命中字典，回退使用清洗后的原始文本
+    }
+
+    // --- 3. 从 <tr> 解析商品数据 ---
     function parseTrInfo(tr) {
         if (!tr) return null;
 
@@ -101,12 +139,23 @@
         if (!m) return null;
 
         const name = m[1].trim();
+
         const id = m[2];
 
+        // 部位/分类单元格
         const slotCell = tr.querySelector('td:nth-child(4)');
         const slotName = slotCell ? slotCell.innerText.trim() : '';
 
-        const methodConfig = SLOT_METHOD_MAP[slotName] || { tmethod: '601', tmethod2: '267' };
+        // 判断大类 (tmethod)：如果商品名字中包含 Unique，则归为 Unique Items，否则默认为 Legendary (600)
+        let tmethod = '600';
+        if (name.includes('Unique')) {
+            tmethod = TMETHOD_MAP['Unique Items'] || '602';
+        } else if (TMETHOD_MAP[name]) {
+            tmethod = TMETHOD_MAP[name];
+        }
+
+        // 部位 (tmethod2)
+        const tmethod2 = TMETHOD2_MAP[slotName] || '';
 
         const affixEls = tr.querySelectorAll('span[class*="affix_"], .ps-2 div');
         const attrs = [];
@@ -116,20 +165,24 @@
             if (!attrText) return;
 
             const isGreater = (el.classList.contains('affix_1') || el.querySelector('.affix_1')) ? '1' : '';
-            const cleanName = attrText.replace(/^[\s\*\u2605\u2733]+/, '').trim();
 
-            if (cleanName && !attrs.some(a => a.name === cleanName)) {
+            // 使用 d4AffixKeywords 进行匹配
+            const finalAffixName = matchAffixName(attrText);
+
+            if (finalAffixName && !attrs.some(a => a.name === finalAffixName)) {
                 attrs.push({
-                    name: cleanName,
+                    name: finalAffixName,
+                    m: '',  // 最小值预留
+                    m2: '', // 最大值预留
                     isGreater: isGreater
                 });
             }
         });
 
-        return { tr, name, id, slotName, tmethod: methodConfig.tmethod, tmethod2: methodConfig.tmethod2, attrs };
+        return { tr, name, id, slotName, tmethod, tmethod2, attrs };
     }
 
-    // --- 2. 获取目标行 ---
+    // --- 4. 获取目标行 ---
     function getTargetRows() {
         const checkedBoxs = Array.from(document.querySelectorAll('tbody tr input[type="checkbox"]:checked'));
         const checkedTrs = checkedBoxs.map(cb => cb.closest('tr')).filter(tr => tr && parseTrInfo(tr));
@@ -158,7 +211,7 @@
         tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    // --- 3. 核心 API 动态查询 ---
+    // --- 5. 核心 API 动态查询 ---
     function fetchPriceForInfo(info) {
         return new Promise((resolve, reject) => {
             if (!info) return reject('无商品数据');
@@ -167,21 +220,29 @@
                 gamesort: 'D4',
                 type: 'Items',
                 servername: 'D4 SC Season',
-                tmethod: info.tmethod,
-                tmethod2: info.tmethod2,
+                tmethod: info.tmethod || '600',
+                tmethod2: info.tmethod2 || '',
                 searchname: '',
                 pagesize: '30',
                 page: '1',
+                ajaxtime: performance.now().toString(),
                 matchname: ''
             });
 
+            // 动态挂载属性数组参数
             info.attrs.forEach((attrObj, i) => {
                 params.append(`attr[${i}][a]`, attrObj.name);
-                params.append(`attr[${i}][m]`, '');
-                params.append(`attr[${i}][m2]`, '');
+                params.append(`attr[${i}][m]`, attrObj.m || '');
+                params.append(`attr[${i}][m2]`, attrObj.m2 || '');
                 if (attrObj.isGreater) {
                     params.append(`attr[${i}][g]`, attrObj.isGreater);
                 }
+            });
+
+            console.log(`[比价助手 API 请求] ID:${info.id} | ${info.name}`, {
+                url: FRONTEND_API,
+                rawParams: params.toString(),
+                paramObject: Object.fromEntries(params.entries())
             });
 
             GM_xmlhttpRequest({
@@ -196,7 +257,7 @@
                     try {
                         const data = JSON.parse(response.responseText);
                         const items = data.items || [];
-                        const prices = items.map(i => i.price).filter(p => p > 0);
+                        const prices = items.map(i => parseFloat(i.price)).filter(p => p > 0);
                         const minPrice = prices.length ? Math.min(...prices) : 0;
                         const sameItem = items.find(i => (i.token || '').includes(`[ID:${info.id}]`) || (i.name || '').includes(info.id));
 
@@ -217,9 +278,9 @@
         });
     }
 
-    // --- 4. 刷新浮窗面板视图 ---
+    // --- 6. 刷新浮窗面板视图 ---
     async function updateSingleView() {
-        if (isCollapsed) return; // 折叠状态下不频繁更新视图
+        if (isCollapsed) return;
 
         const { rows, isCheckedMode } = getTargetRows();
         const currentTr = getCurrentActiveTr();
@@ -258,7 +319,7 @@
         }
     }
 
-    // --- 5. 填价逻辑 ---
+    // --- 7. 填价逻辑 ---
     function applyPriceToTr(tr, price) {
         if (!tr || !price || price <= 0) return false;
         const input = tr.querySelector('input[type="number"], input.form-control, td input');
@@ -272,7 +333,7 @@
         return false;
     }
 
-    // --- 6. 批量处理逻辑 ---
+    // --- 8. 批量处理逻辑 ---
     async function batchProcessAll() {
         const { rows, isCheckedMode } = getTargetRows();
 
@@ -312,7 +373,7 @@
         updateSingleView();
     }
 
-    // --- 7. 构建 UI 悬浮面板（带可折叠控制）---
+    // --- 9. 构建 UI 悬浮面板 ---
     function createWidget() {
         if (document.getElementById('price-helper-panel')) return;
 
@@ -337,7 +398,6 @@
                 transition: all 0.25s ease-in-out !important;
             }
 
-            /* 折叠隐藏模式样式 (变身小浮球) */
             #price-helper-panel.collapsed {
                 width: 44px !important;
                 height: 44px !important;
@@ -353,13 +413,8 @@
                 justify-content: center !important;
             }
 
-            #price-helper-panel.collapsed .php-body {
-                display: none !important;
-            }
-
-            #price-helper-panel.collapsed .php-collapsed-btn {
-                display: flex !important;
-            }
+            #price-helper-panel.collapsed .php-body { display: none !important; }
+            #price-helper-panel.collapsed .php-collapsed-btn { display: flex !important; }
 
             .php-collapsed-btn {
                 display: none;
@@ -401,9 +456,7 @@
         `;
 
         panel.innerHTML = '<style>' + cssStyle + '</style>' +
-            '<!-- 迷你浮球状态 -->' +
             '<div class="php-collapsed-btn" id="php-expand-btn" title="点击展开比价助手">💰</div>' +
-            '<!-- 主体面板 -->' +
             '<div class="php-body">' +
                 '<div class="php-title">' +
                     '<span>💰 实时比价助手</span>' +
@@ -436,20 +489,18 @@
 
         (document.body || document.documentElement).appendChild(panel);
 
-        // --- 事件绑定 ---
         const toggleCollapse = () => {
             isCollapsed = !isCollapsed;
             if (isCollapsed) {
                 panel.classList.add('collapsed');
             } else {
                 panel.classList.remove('collapsed');
-                updateSingleView(); // 展开时自动刷新一次
+                updateSingleView();
             }
         };
 
         document.getElementById('php-toggle-collapse').onclick = toggleCollapse;
         document.getElementById('php-expand-btn').onclick = toggleCollapse;
-
         document.getElementById('php-refresh').onclick = updateSingleView;
 
         document.getElementById('btn-prev-item').onclick = () => {
@@ -482,7 +533,7 @@
         document.getElementById('btn-apply-batch').onclick = batchProcessAll;
     }
 
-    // --- 8. 全局事件监听 ---
+    // --- 10. 全局事件监听 ---
     function bindEvents() {
         document.addEventListener('click', (e) => {
             const tr = e.target.closest('tbody tr');
