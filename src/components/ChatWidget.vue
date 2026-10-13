@@ -196,6 +196,7 @@
 
 <script setup>
 import { nextTick, ref } from "vue";
+import { env } from "@/config/env";
 
 const isOpen = ref(false);
 const userInput = ref("");
@@ -242,7 +243,7 @@ const sendMessage = async () => {
 
   try {
     // 3. 使用原生 fetch 請求流式接口
-    const response = await fetch("http://localhost:8000/api/v1/chat", {
+    const response = await fetch(`${env.API_BASE_URL}/api/v1/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

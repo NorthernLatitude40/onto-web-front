@@ -106,6 +106,7 @@
 
 <script setup>
 import { nextTick, ref } from "vue";
+import { env } from "@/config/env";
 
 const userInput = ref("");
 const messages = ref([]);
@@ -140,7 +141,7 @@ const sendMessage = async () => {
 
   try {
     // 使用原生的 fetch 代替 axios 以支持 Stream 响应
-    const response = await fetch("http://localhost:8000/api/v1/chat", {
+    const response = await fetch(`${env.API_BASE_URL}/api/v1/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
