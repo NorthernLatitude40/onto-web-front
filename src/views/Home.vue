@@ -16,7 +16,7 @@ const fetchAggregatedData = async () => {
   errorMessage.value = "";
   try {
     // 调用后端接口
-    const res: any = await axios.get("/scraper/aggregated-items");
+    const res: any = await axios.get("/api/v1/scraper/aggregated-items");
 
     // 根据 FastAPI 返回的格式正确提取数组
     if (res.code === 200 && res.data) {
