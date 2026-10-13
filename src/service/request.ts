@@ -1,8 +1,9 @@
 import axios, { type InternalAxiosRequestConfig, type AxiosResponse, type AxiosError } from 'axios'
+import { env } from "@/config/env";
 
 // 1. 创建 axios 实例
 const service = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api', // 可以从环境变量读取
+  baseURL: env.API_BASE_URL,
   timeout: 10000, // 请求超时时间：10秒
   headers: {
     'Content-Type': 'application/json;charset=utf-8',
