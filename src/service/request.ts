@@ -3,7 +3,7 @@ import { env } from "@/config/env";
 
 // 1. 创建 axios 实例
 const service = axios.create({
-  baseURL: env.API_BASE_URL,
+  baseURL: env.API_BASE_URL + '/api/v1',
   timeout: 10000, // 请求超时时间：10秒
   headers: {
     'Content-Type': 'application/json;charset=utf-8',
