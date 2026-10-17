@@ -20,7 +20,7 @@
               <SelectItem
                 v-for="project in projects"
                 :key="project.id"
-                :value="project.id"
+                :value="String(project.id)"
               >
                 {{ project.name }}
               </SelectItem>
@@ -170,8 +170,9 @@
             <Tabs v-model="activeTab" class="w-full">
               <TabsList>
                 <TabsTrigger value="basic">基本设定</TabsTrigger>
-                <TabsTrigger value="advanced">高级参数</TabsTrigger>
+                <TabsTrigger value="steps">步骤流程</TabsTrigger>
                 <TabsTrigger value="parsing">数据解析规则</TabsTrigger>
+                <TabsTrigger value="multi-parser">多解析器规则</TabsTrigger>
               </TabsList>
 
               <!-- Basic Settings Tab -->
@@ -187,54 +188,11 @@
                   </div>
 
                   <div class="form-group">
-                    <Label for="targetUrl">目标 URL</Label>
-                    <Input
-                      id="targetUrl"
-                      v-model="formData.target_url"
-                      placeholder="https://example.com/api/data"
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <Label for="method">请求方式</Label>
-                    <Select v-model="formData.method">
-                      <SelectTrigger id="method" class="w-full">
-                        <SelectValue placeholder="选择请求方法..." />
-                      </SelectTrigger>
-                      <SelectContent position="popper">
-                        <SelectItem value="GET">GET</SelectItem>
-                        <SelectItem value="POST">POST</SelectItem>
-                        <SelectItem value="PUT">PUT</SelectItem>
-                        <SelectItem value="DELETE">DELETE</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div class="form-group">
                     <Label for="cronSchedule">Cron 定时排程</Label>
                     <Input
                       id="cronSchedule"
                       v-model="formData.cron_schedule"
                       placeholder="0 0 * * * (每天 midnight)"
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-
-              <!-- Advanced Parameters Tab -->
-              <TabsContent value="advanced" class="py-4">
-                <div class="form-grid">
-                  <div class="form-group full-width">
-                    <Label>Headers / Cookies</Label>
-                    <KeyValueEditor v-model="headersData" />
-                  </div>
-
-                  <div class="form-group full-width">
-                    <Label for="userAgent">User-Agent</Label>
-                    <Input
-                      id="userAgent"
-                      v-model="formData.user_agent"
-                      placeholder="Mozilla/5.0..."
                     />
                   </div>
 
@@ -271,37 +229,414 @@
                 </div>
               </TabsContent>
 
+              <!-- Steps Workflow Tab -->
+              <TabsContent value="steps" class="py-4">
+                <div class="form-grid">
+                  <div class="form-group full-width">
+                    <Label>步骤流程</Label>
+                    <p class="step-description">
+                      定义多个步骤，每个步骤可以独立选择爬取模式（API 或
+                      浏览器动态模式）
+                    </p>
+
+                    <!-- Draggable Step Cards -->
+                    <div class="steps-container">
+                      <Card
+                        v-for="(step, index) in steps"
+                        :key="step.id"
+                        class="mb-3 step-card"
+                        draggable="true"
+                        @dragstart="handleDragStart($event, index)"
+                        @dragover.prevent="handleDragOver($event, index)"
+                        @dragenter="handleDragEnter($event, index)"
+                        @dragend="handleDragEnd"
+                        @drop="handleDrop($event, index)"
+                      >
+                        <template #header>
+                          <div class="flex items-center gap-2">
+                            <span class="font-medium text-gray-800"
+                              >步骤 {{ index + 1 }}</span
+                            >
+                            <span class="step-name" v-if="step.name">{{
+                              step.name
+                            }}</span>
+                            <div class="ml-auto flex gap-2">
+                              <Button
+                                @click="duplicateStep(index)"
+                                variant="outline"
+                                size="sm"
+                              >
+                                <CopyIcon class="h-4 w-4" />
+                              </Button>
+                              <Button
+                                @click="removeStep(index)"
+                                variant="destructive"
+                                size="sm"
+                              >
+                                <Trash2Icon class="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </template>
+
+                        <div class="step-card-content">
+                          <!-- Step Name -->
+                          <div class="form-group full-width mb-3">
+                            <Label>步骤名称</Label>
+                            <Input
+                              v-model="step.name"
+                              placeholder="例如: 初始请求, 详情页抓取"
+                            />
+                          </div>
+
+                          <!-- Crawl Mode Selection -->
+                          <div class="form-group full-width mb-3">
+                            <Label>爬取模式</Label>
+                            <Select v-model="step.mode">
+                              <SelectTrigger class="w-full">
+                                <SelectValue placeholder="选择爬取模式..." />
+                              </SelectTrigger>
+                              <SelectContent position="popper">
+                                <SelectItem value="api">API 模式</SelectItem>
+                                <SelectItem value="playwright"
+                                  >Playwright (浏览器动态)</SelectItem
+                                >
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <!-- API Mode Fields -->
+                          <template v-if="step.mode === 'api'">
+                            <div class="form-group full-width mb-3">
+                              <Label>请求 URL</Label>
+                              <Input
+                                v-model="step.url"
+                                placeholder="https://example.com/api/endpoint"
+                              />
+                            </div>
+
+                            <div class="form-group full-width mb-3">
+                              <Label>请求方式</Label>
+                              <Select v-model="step.method">
+                                <SelectTrigger class="w-full">
+                                  <SelectValue placeholder="选择请求方法..." />
+                                </SelectTrigger>
+                                <SelectContent position="popper">
+                                  <SelectItem value="GET">GET</SelectItem>
+                                  <SelectItem value="POST">POST</SelectItem>
+                                  <SelectItem value="PUT">PUT</SelectItem>
+                                  <SelectItem value="DELETE">DELETE</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div class="form-group full-width mb-3">
+                              <Label>请求参数 (JSON)</Label>
+                              <Textarea
+                                v-model="step.params_json"
+                                placeholder='{"param1": "value1", "param2": "value2"}'
+                                rows="4"
+                              />
+                            </div>
+
+                            <div class="form-group full-width mb-3">
+                              <Label>Headers (JSON)</Label>
+                              <Textarea
+                                v-model="step.headers_json"
+                                placeholder='{"Content-Type": "application/json"}'
+                                rows="4"
+                              />
+                            </div>
+                          </template>
+
+                          <!-- Playwright Mode Fields -->
+                          <template v-else-if="step.mode === 'playwright'">
+                            <div class="form-group full-width mb-3">
+                              <Label>页面 URL</Label>
+                              <Input
+                                v-model="step.url"
+                                placeholder="https://example.com/page"
+                              />
+                            </div>
+
+                            <div class="form-group full-width mb-3">
+                              <Label>等待选择器</Label>
+                              <Input
+                                v-model="step.wait_selector"
+                                placeholder=".content-loaded, #main-content"
+                              />
+                            </div>
+
+                            <div class="form-group full-width mb-3">
+                              <Label>执行 JavaScript</Label>
+                              <Textarea
+                                v-model="step.script"
+                                placeholder="// 返回数据的函数\ndocument.querySelector('.data').textContent"
+                                rows="6"
+                              />
+                            </div>
+                          </template>
+                        </div>
+                      </Card>
+                    </div>
+
+                    <!-- Add New Step Button -->
+                    <Button
+                      @click="addStep"
+                      variant="outline"
+                      size="sm"
+                      class="mt-3"
+                    >
+                      <PlusIcon class="mr-2 h-4 w-4" /> 添加新步骤
+                    </Button>
+                  </div>
+                </div>
+              </TabsContent>
+
               <!-- Data Parsing Rules Tab -->
               <TabsContent value="parsing" class="py-4">
                 <div class="form-grid">
-                  <div class="form-group full-width">
-                    <Label for="cssSelector">CSS Selector</Label>
-                    <Textarea
-                      id="cssSelector"
-                      v-model="formData.css_selector"
-                      placeholder=".product-item, .article"
-                      rows="4"
-                    />
+                  <div class="form-group full-width mb-6">
+                    <Label>数据解析规则</Label>
+                    <p class="rule-description">
+                      支持多种解析器混用。每个步骤可以配置不同的解析规则，或使用全局规则
+                    </p>
                   </div>
 
-                  <div class="form-group full-width">
-                    <Label for="xpath">XPath</Label>
-                    <Textarea
-                      id="xpath"
-                      v-model="formData.xpath"
-                      placeholder="//div[@class='content']"
-                      rows="4"
-                    />
+                  <!-- Global Parsing Rules -->
+                  <div class="form-group full-width mb-4">
+                    <h4 class="section-title">全局解析规则</h4>
+                    <p class="section-description">
+                      应用于所有步骤的默认解析规则
+                    </p>
+
+                    <!-- JSONPath for API responses -->
+                    <div class="rule-section mb-4">
+                      <Label>JSONPath 规则 (API)</Label>
+                      <Textarea
+                        v-model="globalParsingRules.jsonpath"
+                        placeholder="$.data.items[*].title, $.results[0].id"
+                        rows="3"
+                      />
+                    </div>
+
+                    <!-- CSS/XPath for HTML -->
+                    <div class="rule-section mb-4">
+                      <Label>CSS Selector</Label>
+                      <Textarea
+                        v-model="globalParsingRules.css_selector"
+                        placeholder=".product-item, .article"
+                        rows="3"
+                      />
+                    </div>
+
+                    <div class="rule-section mb-4">
+                      <Label>XPath</Label>
+                      <Textarea
+                        v-model="globalParsingRules.xpath"
+                        placeholder="//div[@class='content']"
+                        rows="3"
+                      />
+                    </div>
+
+                    <!-- Regex for text extraction -->
+                    <div class="rule-section mb-4">
+                      <Label>正则表达式 (Regex)</Label>
+                      <Textarea
+                        v-model="globalParsingRules.regex"
+                        placeholder='价格: "\$(\\d+\\.\\d{2})"\n日期: "(\\d{4}-\\d{2}-\\d{2})"'
+                        rows="4"
+                      />
+                    </div>
+
+                    <!-- JSON Schema for structured data -->
+                    <div class="rule-section mb-4">
+                      <Label>JSON Schema 规则</Label>
+                      <Textarea
+                        v-model="globalParsingRules.json_schema"
+                        placeholder="{...}"
+                        rows="6"
+                      />
+                    </div>
                   </div>
 
+                  <!-- Step-specific Parsing Rules -->
                   <div class="form-group full-width">
-                    <Label for="jsonSchema">JSON Schema 规则</Label>
-                    <Textarea
-                      id="jsonSchema"
-                      v-model="formData.json_schema"
-                      placeholder="{...}"
-                      rows="6"
-                    />
+                    <h4 class="section-title">步骤级解析规则</h4>
+                    <p class="section-description">
+                      为每个步骤单独配置解析规则（覆盖全局规则）
+                    </p>
+
+                    <div
+                      v-for="(step, index) in steps"
+                      :key="`parsing-${step.id}`"
+                      class="step-parsing-rule mb-4 p-3 bg-gray-50 rounded"
+                    >
+                      <h5 class="step-parsing-title">
+                        步骤 {{ index + 1 }}: {{ step.name || "未命名" }}
+                      </h5>
+
+                      <!-- JSONPath for API responses -->
+                      <div class="rule-section mb-2">
+                        <Label>JSONPath 规则 (API)</Label>
+                        <Textarea
+                          v-model="step.parsing_rules.jsonpath"
+                          placeholder="$.data.items[*].title, $.results[0].id"
+                          rows="2"
+                        />
+                      </div>
+
+                      <!-- CSS/XPath for HTML -->
+                      <div class="rule-section mb-2">
+                        <Label>CSS Selector</Label>
+                        <Textarea
+                          v-model="step.parsing_rules.css_selector"
+                          placeholder=".product-item, .article"
+                          rows="2"
+                        />
+                      </div>
+
+                      <div class="rule-section mb-2">
+                        <Label>XPath</Label>
+                        <Textarea
+                          v-model="step.parsing_rules.xpath"
+                          placeholder="//div[@class='content']"
+                          rows="2"
+                        />
+                      </div>
+
+                      <!-- Regex for text extraction -->
+                      <div class="rule-section mb-2">
+                        <Label>正则表达式 (Regex)</Label>
+                        <Textarea
+                          v-model="step.parsing_rules.regex"
+                          placeholder='价格: "\$(\\d+\\.\\d{2})"'
+                          rows="3"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <!-- Multi-Parser Rules Tab -->
+              <TabsContent value="multi-parser">
+                <div class="p-6">
+                  <h3 class="text-lg font-semibold mb-4">多解析器规则</h3>
+                  <p class="text-sm text-gray-600 mb-6">
+                    为每个步骤配置多个独立的解析器规则，支持JSONPath、CSS选择器、XPath和正则表达式
+                  </p>
+
+                  <!-- Step-specific Multi-Parser Rules -->
+                  <div class="form-group full-width">
+                    <h4 class="section-title mb-2">步骤级多解析器规则</h4>
+                    <p class="section-description text-sm text-gray-600 mb-4">
+                      为每个步骤单独配置多个解析规则（覆盖全局规则）
+                    </p>
+
+                    <div
+                      v-for="(step, stepIndex) in steps"
+                      :key="`multi-parser-${step.id}`"
+                      class="step-multi-parser-container mb-6 p-4 bg-gray-50 rounded border"
+                    >
+                      <h5
+                        class="step-parsing-title text-blue-700 font-medium mb-3"
+                      >
+                        步骤 {{ stepIndex + 1 }}: {{ step.name || "未命名" }}
+                      </h5>
+
+                      <!-- Multi-parser rules list -->
+                      <div
+                        v-if="step.multi_parser_rules.length > 0"
+                        class="rules-list mb-4"
+                      >
+                        <div
+                          v-for="(rule, ruleIndex) in step.multi_parser_rules"
+                          :key="`${step.id}-${rule.id}`"
+                          class="rule-item p-3 bg-white rounded shadow-sm mb-2 border"
+                        >
+                          <div class="flex justify-between items-start mb-2">
+                            <h6 class="font-medium text-blue-800">
+                              规则 {{ ruleIndex + 1 }}: {{ rule.name }}
+                            </h6>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              @click="
+                                step.multi_parser_rules.splice(ruleIndex, 1)
+                              "
+                            >
+                              删除
+                            </Button>
+                          </div>
+
+                          <div
+                            class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2"
+                          >
+                            <!-- Parser Type -->
+                            <div>
+                              <Label>解析器类型</Label>
+                              <Select
+                                v-model="rule.type"
+                                :disabled="step.multi_parser_rules.length === 1"
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="jsonpath"
+                                    >JSONPath</SelectItem
+                                  >
+                                  <SelectItem value="css">CSS选择器</SelectItem>
+                                  <SelectItem value="xpath">XPath</SelectItem>
+                                  <SelectItem value="regex"
+                                    >正则表达式</SelectItem
+                                  >
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <!-- Output Field -->
+                            <div>
+                              <Label>输出字段</Label>
+                              <Input
+                                v-model="rule.output_field"
+                                placeholder="data.items"
+                              />
+                            </div>
+                          </div>
+
+                          <!-- Expression based on type -->
+                          <div class="mb-2">
+                            <Label>表达式</Label>
+                            <Textarea
+                              v-model="rule.expression"
+                              :placeholder="getParserPlaceholder(rule.type)"
+                              rows="3"
+                            />
+                          </div>
+
+                          <!-- Description -->
+                          <div class="mb-2">
+                            <Label>描述 (可选)</Label>
+                            <Input
+                              v-model="rule.description"
+                              placeholder="此规则用于提取..."
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Add new rule button -->
+                      <Button
+                        size="sm"
+                        class="mb-4"
+                        @click="addMultiParserRule(stepIndex)"
+                      >
+                        <PlusIcon class="w-4 h-4 mr-2" />
+                        添加新解析规则
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </TabsContent>
@@ -355,7 +690,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert } from "@/components/ui/alert";
-import { env } from "@/config/env";
+import { Card } from "@/components/ui/card";
 
 // Icons
 import {
@@ -371,10 +706,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Info,
+  CopyIcon,
+  Trash2Icon,
 } from "@lucide/vue";
-
-// Local Components
-import KeyValueEditor from "./KeyValueEditor.vue";
 
 // ---------- State ----------
 const configs = ref<any[]>([]);
@@ -393,30 +727,171 @@ const creatingNewConfig = ref(false);
 const message = ref("");
 const messageType = ref<"info" | "success" | "error">("info");
 
+// Step interface for the new workflow system
+interface ParsingRule {
+  jsonpath?: string;
+  css_selector?: string;
+  xpath?: string;
+  regex?: string;
+  json_schema?: string;
+}
+
+interface MultiParserRule {
+  id: string;
+  name: string;
+  type: "jsonpath" | "css" | "xpath" | "regex";
+  expression: string;
+  output_field: string;
+  description?: string;
+}
+
+interface Step {
+  id: string;
+  name: string;
+  mode: "api" | "playwright";
+  url: string;
+  method: string;
+  params_json: string;
+  headers_json: string;
+  wait_selector?: string;
+  script?: string;
+  parsing_rules: ParsingRule;
+  multi_parser_rules: MultiParserRule[];
+}
+
+const steps = ref<Step[]>([
+  {
+    id: "step1",
+    name: "初始请求",
+    mode: "api",
+    url: "",
+    method: "GET",
+    params_json: "{}",
+    headers_json: "{}",
+    parsing_rules: {},
+    multi_parser_rules: [],
+  },
+]);
+
+const globalParsingRules = ref<ParsingRule>({
+  jsonpath: "",
+  css_selector: "",
+  xpath: "",
+  regex: "",
+  json_schema: JSON.stringify({ type: "object" }, null, 2),
+});
+
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
 const createDefaultForm = () => ({
   name: "",
-  target_url: "",
-  method: "GET",
   cron_schedule: "",
   user_agent: DEFAULT_USER_AGENT,
   concurrency: 5,
   timeout: 30,
   proxy: "",
-  css_selector: "",
-  xpath: "",
-  json_schema: JSON.stringify({ type: "object" }, null, 2),
 });
 
-const createDefaultHeaders = () => [
-  { key: "User-Agent", value: "Mozilla/5.0" },
-  { key: "Accept", value: "application/json" },
-];
-
 const formData = ref(createDefaultForm());
-const headersData = ref(createDefaultHeaders());
+
+// ---------- Step Management ----------
+const addStep = () => {
+  const newStep: Step = {
+    id: `step${steps.value.length + 1}`,
+    name: `步骤 ${steps.value.length + 1}`,
+    mode: "api",
+    url: "",
+    method: "GET",
+    params_json: "{}",
+    headers_json: "{}",
+    parsing_rules: {},
+    multi_parser_rules: [],
+  };
+  steps.value.push(newStep);
+};
+
+const removeStep = (index: number) => {
+  if (steps.value.length > 1) {
+    steps.value.splice(index, 1);
+  }
+};
+
+const duplicateStep = (index: number) => {
+  const stepToDuplicate = steps.value[index];
+  const newStep: Step = {
+    id: `step${steps.value.length + 1}`,
+    name: `${stepToDuplicate.name} (副本)`,
+    mode: stepToDuplicate.mode,
+    url: stepToDuplicate.url,
+    method: stepToDuplicate.method,
+    params_json: stepToDuplicate.params_json,
+    headers_json: stepToDuplicate.headers_json,
+    wait_selector: stepToDuplicate.wait_selector,
+    script: stepToDuplicate.script,
+    parsing_rules: { ...stepToDuplicate.parsing_rules },
+    multi_parser_rules: [...stepToDuplicate.multi_parser_rules],
+  };
+  steps.value.splice(index + 1, 0, newStep);
+};
+
+// ---------- Multi-Parser Rule Management ----------
+const addMultiParserRule = (stepIndex: number) => {
+  const newRuleId = `rule-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+  const newRule: MultiParserRule = {
+    id: newRuleId,
+    name: "新规则",
+    type: "jsonpath",
+    expression: "",
+    output_field: "",
+  };
+
+  steps.value[stepIndex].multi_parser_rules.push(newRule);
+};
+
+// Drag and drop for reordering steps
+const draggedIndex = ref<number | null>(null);
+
+const handleDragStart = (event: DragEvent, index: number) => {
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", index.toString());
+  }
+  draggedIndex.value = index;
+};
+
+const handleDragOver = (event: DragEvent, index: number) => {
+  if (draggedIndex.value === null || draggedIndex.value === index) return;
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
+};
+
+const handleDragEnter = (event: DragEvent, index: number) => {
+  if (draggedIndex.value === null || draggedIndex.value === index) return;
+  event.preventDefault();
+};
+
+const handleDrop = (event: DragEvent, targetIndex: number) => {
+  event.preventDefault();
+  if (draggedIndex.value === null || draggedIndex.value === targetIndex) {
+    draggedIndex.value = null;
+    return;
+  }
+
+  const items = [...steps.value];
+  const draggedItem = items[draggedIndex.value];
+  items.splice(draggedIndex.value, 1);
+  items.splice(targetIndex, 0, draggedItem);
+  steps.value = items;
+  draggedIndex.value = null;
+};
+
+const handleDragEnd = () => {
+  draggedIndex.value = null;
+};
 
 // ---------- Helpers ----------
 let messageTimer: ReturnType<typeof setTimeout> | null = null;
@@ -438,7 +913,7 @@ const errorText = (error: any) =>
 
 const buildPayload = () => {
   let jsonSchema: unknown = {};
-  const raw = formData.value.json_schema?.trim();
+  const raw = globalParsingRules.value.json_schema?.trim();
   if (raw) {
     try {
       jsonSchema = JSON.parse(raw);
@@ -446,14 +921,22 @@ const buildPayload = () => {
       throw new Error("JSON Schema 规则不是合法的 JSON");
     }
   }
+
   return {
     ...formData.value,
     json_schema: jsonSchema,
-    headers: Object.fromEntries(
-      headersData.value
-        .filter((h) => h.key.trim())
-        .map((h) => [h.key.trim(), h.value]),
-    ),
+    steps: steps.value.map((step) => ({
+      name: step.name,
+      mode: step.mode,
+      url: step.url,
+      method: step.method,
+      params_json: step.params_json,
+      headers_json: step.headers_json,
+      wait_selector: step.wait_selector,
+      script: step.script,
+      parsing_rules: step.parsing_rules,
+      multi_parser_rules: step.multi_parser_rules,
+    })),
   };
 };
 
@@ -463,24 +946,18 @@ const fetchConfigs = async () => {
   try {
     const responseData = await getVehicleConfigs();
 
-    // Handle both array responses and wrapped responses
     let parsedConfigs = [];
     if (Array.isArray(responseData)) {
       parsedConfigs = responseData;
     } else if (responseData && typeof responseData === "object") {
-      parsedConfigs = responseData.data || responseData;
+      parsedConfigs = (responseData as any).data || responseData;
     }
 
     configs.value = Array.isArray(parsedConfigs) ? parsedConfigs : [];
 
-    console.log("Parsed Configs:", configs.value);
-    console.log("Config length:", configs.value.length);
-
     if (selectedConfigId.value) {
-      // 已选中:刷新详情
       await loadSelectedConfig();
     } else if (configs.value.length > 0 && !creatingNewConfig.value) {
-      // 默认选第一个,watch 会自动加载详情
       selectedConfigId.value = String(configs.value[0].id);
     }
   } catch (error: any) {
@@ -498,20 +975,23 @@ const loadSelectedConfig = async () => {
   }
 
   try {
-    const data = await getVehicleConfigById(selectedConfigId.value);
+    const data: any = await getVehicleConfigById(selectedConfigId.value);
     selectedConfig.value = data;
 
     formData.value = {
       name: data.name || "",
-      target_url: data.target_url || "",
-      method: data.method || "GET",
       cron_schedule: data.cron_schedule || "",
       user_agent: data.user_agent || DEFAULT_USER_AGENT,
       concurrency: data.concurrency || 5,
       timeout: data.timeout || 30,
       proxy: data.proxy || "",
+    };
+
+    globalParsingRules.value = {
+      jsonpath: data.jsonpath || "",
       css_selector: data.css_selector || "",
       xpath: data.xpath || "",
+      regex: data.regex || "",
       json_schema: JSON.stringify(
         data.json_schema || { type: "object" },
         null,
@@ -519,12 +999,64 @@ const loadSelectedConfig = async () => {
       ),
     };
 
-    headersData.value = data.headers
-      ? Object.entries(data.headers).map(([key, value]) => ({
-          key,
-          value: Array.isArray(value) ? value.join(", ") : String(value),
-        }))
-      : createDefaultHeaders();
+    if (data.steps && Array.isArray(data.steps)) {
+      steps.value = data.steps.map((step: any) => ({
+        id: step.id || `step${step.index || 1}`,
+        name: step.name || "未命名步骤",
+        mode: step.mode || "api",
+        url: step.url || "",
+        method: step.method || "GET",
+        params_json:
+          typeof step.params_json === "string"
+            ? step.params_json
+            : JSON.stringify(step.params || {}),
+        headers_json:
+          typeof step.headers_json === "string"
+            ? step.headers_json
+            : JSON.stringify(step.headers || {}),
+        wait_selector: step.wait_selector || "",
+        script: step.script || "",
+        parsing_rules: {
+          jsonpath: step.parsing_rules?.jsonpath || "",
+          css_selector: step.parsing_rules?.css_selector || "",
+          xpath: step.parsing_rules?.xpath || "",
+          regex: step.parsing_rules?.regex || "",
+        },
+        multi_parser_rules: step.multi_parser_rules || [],
+      }));
+    } else {
+      steps.value = [];
+
+      if (data.target_url) {
+        steps.value.push({
+          id: "step1",
+          name: "初始请求",
+          mode: data.mode || "api",
+          url: data.target_url || "",
+          method: data.method || "GET",
+          params_json: "{}",
+          headers_json: "{}",
+          parsing_rules: {},
+          multi_parser_rules: [],
+        });
+      }
+
+      if (steps.value.length === 0) {
+        steps.value = [
+          {
+            id: "step1",
+            name: "初始请求",
+            mode: "api",
+            url: data.target_url || "",
+            method: data.method || "GET",
+            params_json: "{}",
+            headers_json: "{}",
+            parsing_rules: {},
+            multi_parser_rules: [],
+          },
+        ];
+      }
+    }
   } catch (error: any) {
     showError("加载配置详情失败: " + errorText(error));
     selectedConfig.value = null;
@@ -533,11 +1065,11 @@ const loadSelectedConfig = async () => {
 
 const createConfig = async () => {
   try {
-    const response = await createVehicleConfig(buildPayload());
+    const response: any = await createVehicleConfig(buildPayload());
     showSuccess("配置创建成功!");
     creatingNewConfig.value = false;
 
-    const newId = response?.id;
+    const newId = response?.id || response?.data?.id;
     selectedConfigId.value = newId !== undefined ? String(newId) : null;
     await fetchConfigs();
   } catch (error: any) {
@@ -565,13 +1097,9 @@ const saveConfig = () => {
     showError("请填写任务名称");
     return;
   }
-  if (!formData.value.target_url.trim()) {
-    showError("请填写目标 URL");
-    return;
-  }
 
   if (selectedConfigId.value) {
-    createConfig();
+    updateConfig();
   } else {
     createConfig();
   }
@@ -584,8 +1112,9 @@ const executeScrape = async () => {
   }
 
   try {
-    const response = await executeVehicleScrape(selectedConfigId.value);
-    showSuccess(`爬取任务已启动! ID: ${response.data.scrape_id}`);
+    const response: any = await executeVehicleScrape(selectedConfigId.value);
+    const scrapeId = response?.scrape_id || response?.data?.scrape_id;
+    showSuccess(`爬取任务已启动! ID: ${scrapeId || "未知"}`);
     await loadSelectedConfig();
   } catch (error: any) {
     showError("执行爬取失败: " + errorText(error));
@@ -599,11 +1128,14 @@ const testConnection = async () => {
   }
 
   try {
-    const response = await testVehicleConnection(selectedConfigId.value);
-    if (response.data.success) {
+    const response: any = await testVehicleConnection(selectedConfigId.value);
+    const success = response?.success ?? response?.data?.success;
+    const msg = response?.message ?? response?.data?.message;
+
+    if (success) {
       showSuccess("连接测试成功!");
     } else {
-      showError("连接测试失败: " + response.data.message);
+      showError("连接测试失败: " + (msg || "未知原因"));
     }
   } catch (error: any) {
     showError("连接测试失败: " + errorText(error));
@@ -613,7 +1145,26 @@ const testConnection = async () => {
 // ---------- UI handlers ----------
 const resetForm = () => {
   formData.value = createDefaultForm();
-  headersData.value = createDefaultHeaders();
+  steps.value = [
+    {
+      id: "step1",
+      name: "初始请求",
+      mode: "api",
+      url: "",
+      method: "GET",
+      params_json: "{}",
+      headers_json: "{}",
+      parsing_rules: {},
+      multi_parser_rules: [],
+    },
+  ];
+  globalParsingRules.value = {
+    jsonpath: "",
+    css_selector: "",
+    xpath: "",
+    regex: "",
+    json_schema: JSON.stringify({ type: "object" }, null, 2),
+  };
 };
 
 const showCreateConfigForm = () => {
@@ -633,7 +1184,6 @@ const refreshConfigs = async () => {
   showSuccess("配置列表已刷新");
 };
 
-// 用 watch 代替 @change / @update:model-value,v-model 变化时一定会触发
 watch(selectedConfigId, (id) => {
   if (id) {
     creatingNewConfig.value = false;
@@ -689,7 +1239,6 @@ const getStatusText = (status: string) => {
 const getAlertVariant = (type: string) =>
   type === "error" ? "destructive" : "default";
 
-// <script setup> 里 <component :is> 不能用字符串解析局部导入,必须返回组件对象本身
 const getAlertIcon = (type: string) => {
   switch (type) {
     case "success":
@@ -919,6 +1468,71 @@ onMounted(() => {
   gap: 8px;
   padding-top: 20px;
   border-top: 1px solid #e5e7eb;
+}
+
+/* Step Cards Styles */
+.step-card {
+  transition: all 0.2s ease;
+  cursor: move;
+}
+
+.step-card:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.step-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.step-name {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.steps-container {
+  margin-top: 16px;
+}
+
+/* Parsing Rules Styles */
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title::before {
+  content: "";
+  width: 4px;
+  height: 16px;
+  background-color: #3b82f6;
+  border-radius: 2px;
+}
+
+.step-description,
+.rule-description,
+.section-description {
+  color: #6b7280;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.step-parsing-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+}
+
+.rule-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 @media (max-width: 768px) {

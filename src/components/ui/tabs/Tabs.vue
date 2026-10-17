@@ -8,5 +8,13 @@
 </template>
 
 <script setup lang="ts">
+import { provide } from "vue";
 import TabsList from "./TabsList.vue";
+
+const activeValue = defineModel<string>();
+
+provide("activeValue", activeValue);
+provide("setActiveValue", (value: string) => {
+  activeValue.value = value;
+});
 </script>

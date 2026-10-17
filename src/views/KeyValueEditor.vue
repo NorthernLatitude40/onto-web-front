@@ -107,7 +107,7 @@ const removeItem = (index: number) => {
   border: 1px solid #d1d5db;
   border-radius: 4px;
   font-size: 14px;
-  color: #1f2937;
+  color: #FFFFFF;
 }
 
 .kv-input:focus {

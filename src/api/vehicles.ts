@@ -19,8 +19,8 @@ export const getVehicleConfigs = async () => {
  * @returns Promise with the vehicle config data
  */
 export const getVehicleConfigById = async (id: string) => {
-    const response = await service.get(`/vehicles/configs/${id}`);
-    return response.data;
+    const response = await service.get(`/vehicles/scrape/configs/${id}`);
+    return response;
 };
 
 /**
@@ -40,7 +40,7 @@ export const createVehicleConfig = async (data: any) => {
  * @returns Promise with the updated config
  */
 export const updateVehicleConfig = async (id: string, data: any) => {
-    const response = await service.put(`/vehicles/configs/${id}`, data);
+    const response = await service.put(`/vehicles/scrape/configs/${id}`, data);
     return response.data;
 };
 
