@@ -160,6 +160,15 @@
               >
                 <ZapIcon class="mr-2 h-4 w-4" /> 测试连接
               </Button>
+              <Button
+                @click="deleteConfig"
+                :disabled="!selectedConfigId"
+                variant="outline"
+                size="sm"
+                class="w-full bg-red-50 hover:bg-red-100 text-red-600 border-red-200"
+              >
+                <Trash2Icon class="mr-2 h-4 w-4" /> 删除配置
+              </Button>
             </div>
           </div>
         </div>
@@ -215,6 +224,15 @@
                       type="number"
                       min="5"
                       max="300"
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <Label for="targetUrl">目标 URL</Label>
+                    <Input
+                      id="targetUrl"
+                      v-model="formData.target_url"
+                      placeholder="https://example.com/api"
                     />
                   </div>
 
@@ -298,8 +316,8 @@
                               </SelectTrigger>
                               <SelectContent position="popper">
                                 <SelectItem value="api">API 模式</SelectItem>
-                                <SelectItem value="playwright"
-                                  >Playwright (浏览器动态)</SelectItem
+                                <SelectItem value="browser"
+                                  >浏览器模式</SelectItem
                                 >
                               </SelectContent>
                             </Select>
@@ -414,7 +432,7 @@
                     <div class="rule-section mb-4">
                       <Label>JSONPath 规则 (API)</Label>
                       <Textarea
-                        v-model="globalParsingRules.jsonpath"
+                        v-model="jsonpath"
                         placeholder="$.data.items[*].title, $.results[0].id"
                         rows="3"
                       />
@@ -480,8 +498,8 @@
                       <div class="rule-section mb-2">
                         <Label>JSONPath 规则 (API)</Label>
                         <Textarea
-                          v-model="step.parsing_rules.jsonpath"
-                          placeholder="$.data.items[*].title, $.results[0].id"
+                          v-model="jsonpath"
+                          placeholder="$['products'][0]['name']"
                           rows="2"
                         />
                       </div>
@@ -493,25 +511,6 @@
                           v-model="step.parsing_rules.css_selector"
                           placeholder=".product-item, .article"
                           rows="2"
-                        />
-                      </div>
-
-                      <div class="rule-section mb-2">
-                        <Label>XPath</Label>
-                        <Textarea
-                          v-model="step.parsing_rules.xpath"
-                          placeholder="//div[@class='content']"
-                          rows="2"
-                        />
-                      </div>
-
-                      <!-- Regex for text extraction -->
-                      <div class="rule-section mb-2">
-                        <Label>正则表达式 (Regex)</Label>
-                        <Textarea
-                          v-model="step.parsing_rules.regex"
-                          placeholder='价格: "\$(\\d+\\.\\d{2})"'
-                          rows="3"
                         />
                       </div>
                     </div>
@@ -649,7 +648,7 @@
               <RotateCcwIcon class="mr-2 h-4 w-4" /> 重置
             </Button>
             <Button @click="saveConfig" variant="default" size="sm">
-              <SaveIcon class="mr-2 h-4 w-4" /> 储存配置
+              <SaveIcon class="mr-2 h-4 w-4" /> 保存
             </Button>
           </div>
         </div>
@@ -674,6 +673,7 @@ import {
   updateVehicleConfig,
   executeVehicleScrape,
   testVehicleConnection,
+  deleteVehicleConfig,
 } from "@/api/vehicles";
 
 // UI Components (shadcn-vue: 每个组件从自己的目录导入)
@@ -711,8 +711,27 @@ import {
 } from "@lucide/vue";
 
 // ---------- State ----------
-const configs = ref<any[]>([]);
-const projects = ref([
+interface Project {
+  id: string;
+  name: string;
+}
+
+interface VehicleConfig {
+  id?: string;
+  name: string;
+  cron_schedule: string;
+  user_agent: string;
+  concurrency: number;
+  timeout: number;
+  proxy: string;
+  target_url: string;
+  status?: "active" | "inactive" | "error";
+  created_at?: string;
+  updated_at?: string;
+}
+
+const configs = ref<VehicleConfig[]>([]);
+const projects = ref<Project[]>([
   { id: "1", name: "车辆数据爬虫" },
   { id: "2", name: "商品价格监控" },
   { id: "3", name: "新闻文章采集" },
@@ -720,20 +739,24 @@ const projects = ref([
 const selectedProjectId = ref("1");
 // Select 的 value 必须是字符串,所以 id 统一用 string 保存
 const selectedConfigId = ref<string | null>(null);
-const selectedConfig = ref<any>(null);
+const selectedConfig = ref<VehicleConfig | null>(null);
 const activeTab = ref("basic");
 const isLoading = ref(true);
 const creatingNewConfig = ref(false);
 const message = ref("");
 const messageType = ref<"info" | "success" | "error">("info");
+const jsonpath = ref<string>("");
 
 // Step interface for the new workflow system
 interface ParsingRule {
+  id?: string;
+  name: string;
   jsonpath?: string;
   css_selector?: string;
   xpath?: string;
   regex?: string;
-  json_schema?: string;
+  output_field: string;
+  required?: boolean;
 }
 
 interface MultiParserRule {
@@ -773,30 +796,48 @@ const steps = ref<Step[]>([
   },
 ]);
 
-const globalParsingRules = ref<ParsingRule>({
-  jsonpath: "",
-  css_selector: "",
-  xpath: "",
-  regex: "",
-  json_schema: JSON.stringify({ type: "object" }, null, 2),
-});
+const globalParsingRules = ref<ParsingRule[]>([]);
+
+interface FormData {
+  name: string;
+  cron_schedule: string;
+  user_agent: string;
+  concurrency: number;
+  timeout: number;
+  proxy: string;
+  target_url: string;
+}
+
+// API Response Interfaces
+interface ApiResponse<T> {
+  data: T;
+  status: number;
+  message?: string;
+}
+
+interface ErrorResponse {
+  error: string;
+  message: string;
+  statusCode: number;
+}
 
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
-const createDefaultForm = () => ({
+const createDefaultForm = (): FormData => ({
   name: "",
   cron_schedule: "",
   user_agent: DEFAULT_USER_AGENT,
   concurrency: 5,
   timeout: 30,
   proxy: "",
+  target_url: "",
 });
 
-const formData = ref(createDefaultForm());
+const formData = ref<FormData>(createDefaultForm());
 
 // ---------- Step Management ----------
-const addStep = () => {
+const addStep = (): void => {
   const newStep: Step = {
     id: `step${steps.value.length + 1}`,
     name: `步骤 ${steps.value.length + 1}`,
@@ -811,13 +852,13 @@ const addStep = () => {
   steps.value.push(newStep);
 };
 
-const removeStep = (index: number) => {
+const removeStep = (index: number): void => {
   if (steps.value.length > 1) {
     steps.value.splice(index, 1);
   }
 };
 
-const duplicateStep = (index: number) => {
+const duplicateStep = (index: number): void => {
   const stepToDuplicate = steps.value[index];
   const newStep: Step = {
     id: `step${steps.value.length + 1}`,
@@ -829,14 +870,14 @@ const duplicateStep = (index: number) => {
     headers_json: stepToDuplicate.headers_json,
     wait_selector: stepToDuplicate.wait_selector,
     script: stepToDuplicate.script,
-    parsing_rules: { ...stepToDuplicate.parsing_rules },
+    parsing_rules: stepToDuplicate.parsing_rules,
     multi_parser_rules: [...stepToDuplicate.multi_parser_rules],
   };
   steps.value.splice(index + 1, 0, newStep);
 };
 
 // ---------- Multi-Parser Rule Management ----------
-const addMultiParserRule = (stepIndex: number) => {
+const addMultiParserRule = (stepIndex: number): void => {
   const newRuleId = `rule-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
   const newRule: MultiParserRule = {
@@ -853,7 +894,7 @@ const addMultiParserRule = (stepIndex: number) => {
 // Drag and drop for reordering steps
 const draggedIndex = ref<number | null>(null);
 
-const handleDragStart = (event: DragEvent, index: number) => {
+const handleDragStart = (event: DragEvent, index: number): void => {
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", index.toString());
@@ -861,7 +902,7 @@ const handleDragStart = (event: DragEvent, index: number) => {
   draggedIndex.value = index;
 };
 
-const handleDragOver = (event: DragEvent, index: number) => {
+const handleDragOver = (event: DragEvent, index: number): void => {
   if (draggedIndex.value === null || draggedIndex.value === index) return;
   event.preventDefault();
   if (event.dataTransfer) {
@@ -869,12 +910,12 @@ const handleDragOver = (event: DragEvent, index: number) => {
   }
 };
 
-const handleDragEnter = (event: DragEvent, index: number) => {
+const handleDragEnter = (event: DragEvent, index: number): void => {
   if (draggedIndex.value === null || draggedIndex.value === index) return;
   event.preventDefault();
 };
 
-const handleDrop = (event: DragEvent, targetIndex: number) => {
+const handleDrop = (event: DragEvent, targetIndex: number): void => {
   event.preventDefault();
   if (draggedIndex.value === null || draggedIndex.value === targetIndex) {
     draggedIndex.value = null;
@@ -889,14 +930,14 @@ const handleDrop = (event: DragEvent, targetIndex: number) => {
   draggedIndex.value = null;
 };
 
-const handleDragEnd = () => {
+const handleDragEnd = (): void => {
   draggedIndex.value = null;
 };
 
 // ---------- Helpers ----------
 let messageTimer: ReturnType<typeof setTimeout> | null = null;
 
-const setMessage = (msg: string, type: "info" | "success" | "error") => {
+const setMessage = (msg: string, type: "info" | "success" | "error"): void => {
   message.value = msg;
   messageType.value = type;
   if (messageTimer) clearTimeout(messageTimer);
@@ -904,11 +945,11 @@ const setMessage = (msg: string, type: "info" | "success" | "error") => {
     message.value = "";
   }, 5000);
 };
-const showSuccess = (msg: string) => setMessage(msg, "success");
-const showError = (msg: string) => setMessage(msg, "error");
-const showInfo = (msg: string) => setMessage(msg, "info");
+const showSuccess = (msg: string): void => setMessage(msg, "success");
+const showError = (msg: string): void => setMessage(msg, "error");
+const showInfo = (msg: string): void => setMessage(msg, "info");
 
-const errorText = (error: any) =>
+const errorText = (error: unknown): string =>
   error?.response?.data?.detail || error?.message || "未知错误";
 
 const buildPayload = () => {
@@ -922,20 +963,28 @@ const buildPayload = () => {
     }
   }
 
+  debugger;
   return {
     ...formData.value,
     json_schema: jsonSchema,
     steps: steps.value.map((step) => ({
       name: step.name,
       mode: step.mode,
-      url: step.url,
+      target_url: step.url,
       method: step.method,
-      params_json: step.params_json,
-      headers_json: step.headers_json,
+      params: step.params_json ? JSON.parse(step.params_json) : {},
+      headers: step.headers_json ? JSON.parse(step.headers_json) : {},
       wait_selector: step.wait_selector,
       script: step.script,
-      parsing_rules: step.parsing_rules,
-      multi_parser_rules: step.multi_parser_rules,
+      // ✅ 修正點：這裡必須是一個 ParsingRule 物件，而不是陣列
+      parsing_rules: {
+        name: step.parsing_rule_name || "默认解析规则",
+        output_field: step.output_field || "model_name",
+        jsonpath: jsonpath.value,
+        required: true,
+      },
+      delay: step.delay ? Number(step.delay) : null,
+      retry_count: step.retry_count ? Number(step.retry_count) : null,
     })),
   };
 };
@@ -946,11 +995,12 @@ const fetchConfigs = async () => {
   try {
     const responseData = await getVehicleConfigs();
 
-    let parsedConfigs = [];
+    let parsedConfigs: VehicleConfig[] = [];
     if (Array.isArray(responseData)) {
-      parsedConfigs = responseData;
+      parsedConfigs = responseData as VehicleConfig[];
     } else if (responseData && typeof responseData === "object") {
-      parsedConfigs = (responseData as any).data || responseData;
+      const apiResponse = responseData as ApiResponse<VehicleConfig[]>;
+      parsedConfigs = (apiResponse.data || apiResponse) as VehicleConfig[];
     }
 
     configs.value = Array.isArray(parsedConfigs) ? parsedConfigs : [];
@@ -975,7 +1025,17 @@ const loadSelectedConfig = async () => {
   }
 
   try {
-    const data: any = await getVehicleConfigById(selectedConfigId.value);
+    const response = await getVehicleConfigById(selectedConfigId.value);
+    let data: VehicleConfig;
+
+    // Handle different response formats
+    if (response && typeof response === "object") {
+      const apiResponse = response as ApiResponse<VehicleConfig> | any;
+      data = (apiResponse.data || apiResponse) as VehicleConfig;
+    } else {
+      data = response as VehicleConfig;
+    }
+
     selectedConfig.value = data;
 
     formData.value = {
@@ -985,10 +1045,10 @@ const loadSelectedConfig = async () => {
       concurrency: data.concurrency || 5,
       timeout: data.timeout || 30,
       proxy: data.proxy || "",
+      target_url: data.target_url || "",
     };
 
     globalParsingRules.value = {
-      jsonpath: data.jsonpath || "",
       css_selector: data.css_selector || "",
       xpath: data.xpath || "",
       regex: data.regex || "",
@@ -999,31 +1059,43 @@ const loadSelectedConfig = async () => {
       ),
     };
 
-    if (data.steps && Array.isArray(data.steps)) {
+    if (data.steps.length > 0 && Array.isArray(data.steps)) {
       steps.value = data.steps.map((step: any) => ({
         id: step.id || `step${step.index || 1}`,
         name: step.name || "未命名步骤",
         mode: step.mode || "api",
-        url: step.url || "",
+        url: step.target_url || "",
         method: step.method || "GET",
         params_json:
           typeof step.params_json === "string"
-            ? step.params_json
+            ? step.params
             : JSON.stringify(step.params || {}),
         headers_json:
           typeof step.headers_json === "string"
-            ? step.headers_json
+            ? step.headers
             : JSON.stringify(step.headers || {}),
         wait_selector: step.wait_selector || "",
         script: step.script || "",
         parsing_rules: {
+          name: step.parsing_rules?.name || "",
+          output_field: step.parsing_rules?.output_field || "model_name",
           jsonpath: step.parsing_rules?.jsonpath || "",
-          css_selector: step.parsing_rules?.css_selector || "",
-          xpath: step.parsing_rules?.xpath || "",
-          regex: step.parsing_rules?.regex || "",
         },
+        // jsonpath: JSON.stringify(
+        //   step.parsing_rules || { type: "object" },
+        //   null,
+        //   2,
+        // ),
         multi_parser_rules: step.multi_parser_rules || [],
       }));
+      // 2. 如果你想让页面的 jsonpath 变量显示第一个步骤的内容（或者你选中的步骤）
+      if (steps.value.length > 0) {
+        jsonpath.value = JSON.stringify(
+          steps.value[0].parsing_rules || { type: "object" },
+          null,
+          2,
+        );
+      }
     } else {
       steps.value = [];
 
@@ -1065,12 +1137,21 @@ const loadSelectedConfig = async () => {
 
 const createConfig = async () => {
   try {
-    const response: any = await createVehicleConfig(buildPayload());
+    const response = await createVehicleConfig(buildPayload());
+    let newId: string | undefined;
+
+    // Handle different response formats
+    if (response && typeof response === "object") {
+      const apiResponse = response as ApiResponse<{ id: string }> | any;
+      newId = apiResponse.data?.id || apiResponse.id;
+    } else {
+      newId = String(response);
+    }
+
     showSuccess("配置创建成功!");
     creatingNewConfig.value = false;
 
-    const newId = response?.id || response?.data?.id;
-    selectedConfigId.value = newId !== undefined ? String(newId) : null;
+    selectedConfigId.value = newId ? String(newId) : null;
     await fetchConfigs();
   } catch (error: any) {
     showError("创建配置失败: " + errorText(error));
@@ -1093,11 +1174,72 @@ const updateConfig = async () => {
 };
 
 const saveConfig = () => {
+  // Validate task name
   if (!formData.value.name.trim()) {
     showError("请填写任务名称");
     return;
   }
 
+  // Validate steps exist and have required fields
+  if (steps.value.length === 0) {
+    showError("至少需要一个步骤");
+    return;
+  }
+
+  // Validate each step has required fields based on mode
+  for (let i = 0; i < steps.value.length; i++) {
+    const step = steps.value[i];
+
+    if (!step.url.trim()) {
+      showError(`步骤 ${i + 1} 的 URL 不能为空`);
+      return;
+    }
+
+    // Validate method for API mode
+    if (step.mode === "api" && !step.method) {
+      showError(`步骤 ${i + 1} 的请求方法不能为空`);
+      return;
+    }
+
+    // Validate params_json is valid JSON
+    if (step.mode === "api") {
+      try {
+        JSON.parse(step.params_json);
+      } catch (e) {
+        showError(`步骤 ${i + 1} 的请求参数不是有效的 JSON`);
+        return;
+      }
+    }
+
+    // Validate headers_json is valid JSON for API mode
+    if (step.mode === "api") {
+      try {
+        JSON.parse(step.headers_json);
+      } catch (e) {
+        showError(`步骤 ${i + 1} 的 Headers 不是有效的 JSON`);
+        return;
+      }
+    }
+
+    // Validate concurrency and timeout are positive numbers
+    if (
+      formData.value.concurrency &&
+      (formData.value.concurrency < 1 || formData.value.concurrency > 50)
+    ) {
+      showError("并发数必须在 1-50 之间");
+      return;
+    }
+
+    if (
+      formData.value.timeout &&
+      (formData.value.timeout < 5 || formData.value.timeout > 300)
+    ) {
+      showError("超时时间必须在 5-300 秒之间");
+      return;
+    }
+  }
+
+  // Save the configuration
   if (selectedConfigId.value) {
     updateConfig();
   } else {
@@ -1112,7 +1254,34 @@ const executeScrape = async () => {
   }
 
   try {
-    const response: any = await executeVehicleScrape(selectedConfigId.value);
+    // Get the current config to extract multi_parser_rules
+    const config = configs.value.find((c) => c.id === selectedConfigId.value);
+    let parsingRules = undefined;
+
+    if (config && config.steps) {
+      // Collect all multi_parser_rules from steps
+      const stepRules = steps.value.flatMap((step) => {
+        if (step.mode === "api" || step.mode === "playwright") {
+          return [
+            {
+              field: rule?.field || "",
+              type: rule?.type || "jsonpath",
+              value: rule?.value || "",
+            },
+          ];
+        }
+        return step.multi_parser_rules || [];
+      });
+
+      if (stepRules.length > 0) {
+        parsingRules = stepRules;
+      }
+    }
+
+    const response: any = await executeVehicleScrape(
+      selectedConfigId.value,
+      parsingRules,
+    );
     const scrapeId = response?.scrape_id || response?.data?.scrape_id;
     showSuccess(`爬取任务已启动! ID: ${scrapeId || "未知"}`);
     await loadSelectedConfig();
@@ -1139,6 +1308,36 @@ const testConnection = async () => {
     }
   } catch (error: any) {
     showError("连接测试失败: " + errorText(error));
+  }
+};
+
+const deleteConfig = async () => {
+  if (!selectedConfigId.value) {
+    showError("请先选择一个配置");
+    return;
+  }
+
+  // Show confirmation dialog
+  const confirmed = confirm(
+    `确定要删除配置 "${selectedConfig.value?.name || "未命名"}" 吗？\n\n注意：此操作无法撤销！`,
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await deleteVehicleConfig(selectedConfigId.value);
+    showSuccess("配置删除成功!");
+
+    // Reset selection and refresh list
+    selectedConfigId.value = null;
+    selectedConfig.value = null;
+    creatingNewConfig.value = false;
+    resetForm();
+    await fetchConfigs();
+  } catch (error: any) {
+    showError("删除配置失败: " + errorText(error));
   }
 };
 
