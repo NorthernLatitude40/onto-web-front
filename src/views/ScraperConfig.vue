@@ -508,7 +508,7 @@
                       <div class="rule-section mb-2">
                         <Label>CSS Selector</Label>
                         <Textarea
-                          v-model="step.parsing_rules.css_selector"
+                          v-model="(step.parsing_rules as ParsingRule).css_selector"
                           placeholder=".product-item, .article"
                           rows="2"
                         />
@@ -778,7 +778,7 @@ interface Step {
   headers_json: string;
   wait_selector?: string;
   script?: string;
-  parsing_rules: ParsingRule | { id?: string; name: string; jsonpath?: string; css_selector?: string; xpath?: string; regex?: string; output_field: string; required?: boolean }[];
+  parsing_rules: ParsingRule | ParsingRule[];
   multi_parser_rules: MultiParserRule[];
   delay?: number;
   retry_count?: number;
