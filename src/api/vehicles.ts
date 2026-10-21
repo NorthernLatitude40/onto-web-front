@@ -68,6 +68,7 @@ export const deleteVehicleConfig = async (id: string) => {
 export const executeVehicleScrape = async (configId: string, parsingRules?: any[]) => {
     const payload = { config_id: configId };
     if (parsingRules && parsingRules.length > 0) {
+        // @ts-ignore - parsing_rules is a dynamic property for the API
         payload.parsing_rules = parsingRules;
     }
     const response = await service.post(`/vehicles/scrape/execute`, payload);

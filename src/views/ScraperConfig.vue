@@ -846,7 +846,7 @@ const addStep = (): void => {
     method: "GET",
     params_json: "{}",
     headers_json: "{}",
-    parsing_rules: {},
+    parsing_rules: [] as ParsingRule[],
     multi_parser_rules: [],
   };
   steps.value.push(newStep);
@@ -1262,13 +1262,7 @@ const executeScrape = async () => {
       // Collect all multi_parser_rules from steps
       const stepRules = steps.value.flatMap((step) => {
         if (step.mode === "api" || step.mode === "playwright") {
-          return [
-            {
-              field: rule?.field || "",
-              type: rule?.type || "jsonpath",
-              value: rule?.value || "",
-            },
-          ];
+          return [...(step.multi_parser_rules || [])];
         }
         return step.multi_parser_rules || [];
       });
@@ -1353,7 +1347,7 @@ const resetForm = () => {
       method: "GET",
       params_json: "{}",
       headers_json: "{}",
-      parsing_rules: {},
+      parsing_rules: [] as ParsingRule[],
       multi_parser_rules: [],
     },
   ];
