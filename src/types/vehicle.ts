@@ -7,12 +7,21 @@ export interface VehicleConfig {
   timeout: number;
   proxy: string;
   target_url: string;
+  css_selector?: string;
+  xpath?: string;
+  regex?: string;
+  json_schema?: any;
   status?: 'active' | 'inactive' | 'error';
   created_at?: string;
   updated_at?: string;
   last_run_at?: string;
   success_rate?: number;
   items_scraped?: number;
+  steps?: Step[];
+}
+
+export interface VehicleConfigWithSteps extends VehicleConfig {
+  steps: Step[];
 }
 
 export interface ParsingRule {
@@ -34,10 +43,10 @@ export interface Step {
   headers_json: string;
   wait_selector?: string;
   script?: string;
-  parsing_rules: ParsingRule[];
+  parsing_rules: ParsingRule[] | { id?: string; name: string; jsonpath?: string; css_selector?: string; xpath?: string; regex?: string; output_field: string; required?: boolean }[];
   multi_parser_rules: any[];
-}
-
-export interface VehicleConfigWithSteps extends VehicleConfig {
-  steps?: Step[];
+  delay?: number;
+  retry_count?: number;
+  parsing_rule_name?: string;
+  output_field?: string;
 }

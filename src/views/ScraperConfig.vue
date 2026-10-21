@@ -778,8 +778,10 @@ interface Step {
   headers_json: string;
   wait_selector?: string;
   script?: string;
-  parsing_rules: ParsingRule;
+  parsing_rules: ParsingRule | { id?: string; name: string; jsonpath?: string; css_selector?: string; xpath?: string; regex?: string; output_field: string; required?: boolean }[];
   multi_parser_rules: MultiParserRule[];
+  delay?: number;
+  retry_count?: number;
 }
 
 const steps = ref<Step[]>([
@@ -970,22 +972,22 @@ const buildPayload = () => {
   return {
     ...formData.value,
     json_schema: jsonSchema,
-    steps: steps.value.map((step) => ({
+    steps: steps.value.map((step: Step) => ({
       name: step.name,
       mode: step.mode,
       target_url: step.url,
       method: step.method,
-      params: step.params_json ? JSON.parse(step.params_json) : {},
-      headers: step.headers_json ? JSON.parse(step.headers_json) : {},
+      params_json: step.params_json || '{}',
+      headers_json: step.headers_json || '{}',
       wait_selector: step.wait_selector,
       script: step.script,
       // ✅ 修正點：這裡必須是一個 ParsingRule 物件，而不是陣列
-      parsing_rules: {
+      parsing_rules: [{
         name: step.parsing_rule_name || "默认解析规则",
         output_field: step.output_field || "model_name",
         jsonpath: jsonpath.value,
         required: true,
-      },
+      }],
       delay: step.delay ? Number(step.delay) : null,
       retry_count: step.retry_count ? Number(step.retry_count) : null,
     })),
