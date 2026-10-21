@@ -1,4 +1,4 @@
-import ChatWidget from '@/views/ChatWidget.vue'
+import Chat from '@/views/Chat.vue'
 import Home from '@/views/Home.vue'
 import ScraperConfig from '@/views/ScraperConfig.vue'
 import { createRouter, createWebHistory } from 'vue-router'
@@ -12,7 +12,7 @@ const routes = [
   {
     path: '/chat',
     name: 'Chat',
-    component: ChatWidget
+    component: Chat
   },
   {
     path: '/scraper-config',
