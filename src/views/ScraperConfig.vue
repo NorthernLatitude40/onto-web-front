@@ -791,7 +791,10 @@ const steps = ref<Step[]>([
     method: "GET",
     params_json: "{}",
     headers_json: "{}",
-    parsing_rules: {},
+    parsing_rules: {
+      name: "默认解析规则",
+      output_field: "model_name",
+    },
     multi_parser_rules: [],
   },
 ]);
@@ -1103,12 +1106,15 @@ const loadSelectedConfig = async () => {
         steps.value.push({
           id: "step1",
           name: "初始请求",
-          mode: data.mode || "api",
+          mode: "api",
           url: data.target_url || "",
-          method: data.method || "GET",
+          method: "GET",
           params_json: "{}",
           headers_json: "{}",
-          parsing_rules: {},
+          parsing_rules: {
+            name: "默认解析规则",
+            output_field: "model_name",
+          },
           multi_parser_rules: [],
         });
       }
@@ -1120,10 +1126,13 @@ const loadSelectedConfig = async () => {
             name: "初始请求",
             mode: "api",
             url: data.target_url || "",
-            method: data.method || "GET",
+            method: "GET",
             params_json: "{}",
             headers_json: "{}",
-            parsing_rules: {},
+            parsing_rules: {
+              name: "默认解析规则",
+              output_field: "model_name",
+            },
             multi_parser_rules: [],
           },
         ];
