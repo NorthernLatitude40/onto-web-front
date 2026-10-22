@@ -1,20 +1,25 @@
-<template>
-  <div class="flex flex-col">
-    <TabsList>
-      <slot name="list"></slot>
-    </TabsList>
-    <slot></slot>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { provide } from "vue";
-import TabsList from "./TabsList.vue";
+import type { TabsRootEmits, TabsRootProps } from 'reka-ui'
+import type { HTMLAttributes } from 'vue'
+import { reactiveOmit } from '@vueuse/core'
+import { cn } from 'cn'
+import { TabsRoot, useForwardPropsEmits } from 'reka-ui'
 
-const activeValue = defineModel<string>();
+const props = defineProps<TabsRootProps & { class?: HTMLAttributes['class'] }>()
+const emits = defineEmits<TabsRootEmits>()
 
-provide("activeValue", activeValue);
-provide("setActiveValue", (value: string) => {
-  activeValue.value = value;
-});
+const delegatedProps = reactiveOmit(props, 'class')
+const forwarded = useForwardPropsEmits(delegatedProps, emits)
 </script>
+
+<template>
+  <TabsRoot
+    v-slot="slotProps"
+    data-slot="tabs"
+    :data-orientation="forwarded.orientation || 'horizontal'"
+    v-bind="forwarded"
+    :class="cn('gap-2 group/tabs flex data-horizontal:flex-col', props.class)"
+  >
+    <slot v-bind="slotProps" />
+  </TabsRoot>
+</template>

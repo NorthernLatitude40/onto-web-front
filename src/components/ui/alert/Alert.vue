@@ -1,32 +1,21 @@
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import type { AlertVariants } from '.'
+import { cn } from 'cn'
+import { alertVariants } from '.'
+
+const props = defineProps<{
+  class?: HTMLAttributes['class']
+  variant?: AlertVariants['variant']
+}>()
+</script>
+
 <template>
   <div
-    :class="[
-      'border rounded-md p-3',
-      variant === 'default'
-        ? 'bg-background border-border'
-        : variant === 'destructive'
-          ? 'bg-destructive/10 border-destructive'
-          : variant === 'warning'
-            ? 'bg-warning/10 border-warning'
-            : 'bg-success/10 border-success',
-    ]"
+    data-slot="alert"
+    :class="cn(alertVariants({ variant }), props.class)"
+    role="alert"
   >
-    <div class="flex items-start gap-3">
-      <slot name="icon"></slot>
-      <div class="flex-1">
-        <slot></slot>
-      </div>
-    </div>
+    <slot />
   </div>
 </template>
-
-<script setup lang="ts">
-defineProps({
-  variant: {
-    type: String,
-    default: "default",
-    validator: (value: string) =>
-      ["default", "destructive", "warning", "success"].includes(value),
-  },
-});
-</script>

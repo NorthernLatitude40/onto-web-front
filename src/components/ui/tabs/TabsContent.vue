@@ -1,22 +1,21 @@
-<template>
-  <div
-    class="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-    v-show="active"
-  >
-    <slot></slot>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { computed, inject } from "vue";
+import type { TabsContentProps } from 'reka-ui'
+import type { HTMLAttributes } from 'vue'
+import { reactiveOmit } from '@vueuse/core'
+import { cn } from 'cn'
+import { TabsContent } from 'reka-ui'
 
-const props = defineProps<{
-  value: string;
-}>();
+const props = defineProps<TabsContentProps & { class?: HTMLAttributes['class'] }>()
 
-const activeValue = inject<{ value: string }>("activeValue");
-
-const active = computed(() => {
-  return activeValue?.value === props.value;
-});
+const delegatedProps = reactiveOmit(props, 'class')
 </script>
+
+<template>
+  <TabsContent
+    data-slot="tabs-content"
+    :class="cn('text-sm flex-1 outline-none', props.class)"
+    v-bind="delegatedProps"
+  >
+    <slot />
+  </TabsContent>
+</template>

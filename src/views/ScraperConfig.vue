@@ -176,469 +176,58 @@
         <!-- Main Content - Configuration Form -->
         <div class="main-content-area">
           <div class="config-tabs">
-            <Tabs v-model="activeTab" class="w-full">
-              <TabsList>
-                <TabsTrigger value="basic">基本设定</TabsTrigger>
-                <TabsTrigger value="steps">步骤流程</TabsTrigger>
-                <TabsTrigger value="parsing">数据解析规则</TabsTrigger>
-                <TabsTrigger value="multi-parser">多解析器规则</TabsTrigger>
-              </TabsList>
+            <Tabs v-model="activeTab" class="w-full flex flex-col space-y-4">
+              <!-- 頂部頁籤按鈕區域 (明確分隔線與水平佈局) -->
+              <div class="border-b pb-3">
+                <TabsList
+                  class="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground"
+                >
+                  <TabsTrigger value="basic">基本设定</TabsTrigger>
+                  <TabsTrigger value="steps">步骤流程</TabsTrigger>
+                  <TabsTrigger value="parsing">数据解析规则</TabsTrigger>
+                  <TabsTrigger value="multi-parser">多解析器规则</TabsTrigger>
+                </TabsList>
+              </div>
 
-              <!-- Basic Settings Tab -->
-              <TabsContent value="basic" class="py-4">
-                <div class="form-grid">
-                  <div class="form-group">
-                    <Label for="name">任务名称</Label>
-                    <Input
-                      id="name"
-                      v-model="formData.name"
-                      placeholder="为配置命名..."
-                    />
-                  </div>
+              <!-- 下方內容表單區域 (獨立滿寬度，絕不擠壓) -->
+              <div class="w-full pt-2">
+                <TabsContent value="basic" class="mt-0">
+                  <BasicSettingsTab :form-data="formData" />
+                </TabsContent>
 
-                  <div class="form-group">
-                    <Label for="cronSchedule">Cron 定时排程</Label>
-                    <Input
-                      id="cronSchedule"
-                      v-model="formData.cron_schedule"
-                      placeholder="0 0 * * * (每天 midnight)"
-                    />
-                  </div>
+                <TabsContent value="steps" class="mt-0 py-4">
+                  <StepsWorkflowTab
+                    :steps="steps"
+                    @add="addStep"
+                    @remove="removeStep"
+                    @duplicate="duplicateStep"
+                    @dragstart="handleDragStart"
+                    @dragover="handleDragOver"
+                    @dragenter="handleDragEnter"
+                    @dragend="handleDragEnd"
+                    @drop="handleDrop"
+                  />
+                </TabsContent>
 
-                  <div class="form-group">
-                    <Label for="concurrency">Concurrency (并发数)</Label>
-                    <Input
-                      id="concurrency"
-                      v-model.number="formData.concurrency"
-                      type="number"
-                      min="1"
-                      max="50"
-                    />
-                  </div>
+                <TabsContent value="parsing" class="mt-0 py-4">
+                  <ParsingRulesTab
+                    :steps="steps"
+                    :global-parsing-rules="globalParsingRules"
+                    v-model:jsonpath="jsonpath"
+                  />
+                </TabsContent>
 
-                  <div class="form-group">
-                    <Label for="timeout">Timeout (秒)</Label>
-                    <Input
-                      id="timeout"
-                      v-model.number="formData.timeout"
-                      type="number"
-                      min="5"
-                      max="300"
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <Label for="targetUrl">目标 URL</Label>
-                    <Input
-                      id="targetUrl"
-                      v-model="formData.target_url"
-                      placeholder="https://example.com/api"
-                    />
-                  </div>
-
-                  <div class="form-group full-width">
-                    <Label for="proxy">Proxy 代理</Label>
-                    <Input
-                      id="proxy"
-                      v-model="formData.proxy"
-                      placeholder="http://proxy.example.com:8080"
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-
-              <!-- Steps Workflow Tab -->
-              <TabsContent value="steps" class="py-4">
-                <div class="form-grid">
-                  <div class="form-group full-width">
-                    <Label>步骤流程</Label>
-                    <p class="step-description">
-                      定义多个步骤，每个步骤可以独立选择爬取模式（API 或
-                      浏览器动态模式）
-                    </p>
-
-                    <!-- Draggable Step Cards -->
-                    <div class="steps-container">
-                      <Card
-                        v-for="(step, index) in steps"
-                        :key="step.id"
-                        class="mb-3 step-card"
-                        draggable="true"
-                        @dragstart="handleDragStart($event, index)"
-                        @dragover.prevent="handleDragOver($event, index)"
-                        @dragenter="handleDragEnter($event, index)"
-                        @dragend="handleDragEnd"
-                        @drop="handleDrop($event, index)"
-                      >
-                        <template #header>
-                          <div class="flex items-center gap-2">
-                            <span class="font-medium text-gray-800"
-                              >步骤 {{ index + 1 }}</span
-                            >
-                            <span class="step-name" v-if="step.name">{{
-                              step.name
-                            }}</span>
-                            <div class="ml-auto flex gap-2">
-                              <Button
-                                @click="duplicateStep(index)"
-                                variant="outline"
-                                size="sm"
-                              >
-                                <CopyIcon class="h-4 w-4" />
-                              </Button>
-                              <Button
-                                @click="removeStep(index)"
-                                variant="destructive"
-                                size="sm"
-                              >
-                                <Trash2Icon class="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </template>
-
-                        <div class="step-card-content">
-                          <!-- Step Name -->
-                          <div class="form-group full-width mb-3">
-                            <Label>步骤名称</Label>
-                            <Input
-                              v-model="step.name"
-                              placeholder="例如: 初始请求, 详情页抓取"
-                            />
-                          </div>
-
-                          <!-- Crawl Mode Selection -->
-                          <div class="form-group full-width mb-3">
-                            <Label>爬取模式</Label>
-                            <Select v-model="step.mode">
-                              <SelectTrigger class="w-full">
-                                <SelectValue placeholder="选择爬取模式..." />
-                              </SelectTrigger>
-                              <SelectContent position="popper">
-                                <SelectItem value="api">API 模式</SelectItem>
-                                <SelectItem value="browser"
-                                  >浏览器模式</SelectItem
-                                >
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <!-- API Mode Fields -->
-                          <template v-if="step.mode === 'api'">
-                            <div class="form-group full-width mb-3">
-                              <Label>请求 URL</Label>
-                              <Input
-                                v-model="step.url"
-                                placeholder="https://example.com/api/endpoint"
-                              />
-                            </div>
-
-                            <div class="form-group full-width mb-3">
-                              <Label>请求方式</Label>
-                              <Select v-model="step.method">
-                                <SelectTrigger class="w-full">
-                                  <SelectValue placeholder="选择请求方法..." />
-                                </SelectTrigger>
-                                <SelectContent position="popper">
-                                  <SelectItem value="GET">GET</SelectItem>
-                                  <SelectItem value="POST">POST</SelectItem>
-                                  <SelectItem value="PUT">PUT</SelectItem>
-                                  <SelectItem value="DELETE">DELETE</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            <div class="form-group full-width mb-3">
-                              <Label>请求参数 (JSON)</Label>
-                              <Textarea
-                                v-model="step.params_json"
-                                placeholder='{"param1": "value1", "param2": "value2"}'
-                                rows="4"
-                              />
-                            </div>
-
-                            <div class="form-group full-width mb-3">
-                              <Label>Headers (JSON)</Label>
-                              <Textarea
-                                v-model="step.headers_json"
-                                placeholder='{"Content-Type": "application/json"}'
-                                rows="4"
-                              />
-                            </div>
-                          </template>
-
-                          <!-- Playwright Mode Fields -->
-                          <template v-else-if="step.mode === 'playwright'">
-                            <div class="form-group full-width mb-3">
-                              <Label>页面 URL</Label>
-                              <Input
-                                v-model="step.url"
-                                placeholder="https://example.com/page"
-                              />
-                            </div>
-
-                            <div class="form-group full-width mb-3">
-                              <Label>等待选择器</Label>
-                              <Input
-                                v-model="step.wait_selector"
-                                placeholder=".content-loaded, #main-content"
-                              />
-                            </div>
-
-                            <div class="form-group full-width mb-3">
-                              <Label>执行 JavaScript</Label>
-                              <Textarea
-                                v-model="step.script"
-                                placeholder="// 返回数据的函数\ndocument.querySelector('.data').textContent"
-                                rows="6"
-                              />
-                            </div>
-                          </template>
-                        </div>
-                      </Card>
-                    </div>
-
-                    <!-- Add New Step Button -->
-                    <Button
-                      @click="addStep"
-                      variant="outline"
-                      size="sm"
-                      class="mt-3"
-                    >
-                      <PlusIcon class="mr-2 h-4 w-4" /> 添加新步骤
-                    </Button>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <!-- Data Parsing Rules Tab -->
-              <TabsContent value="parsing" class="py-4">
-                <div class="form-grid">
-                  <div class="form-group full-width mb-6">
-                    <Label>数据解析规则</Label>
-                    <p class="rule-description">
-                      支持多种解析器混用。每个步骤可以配置不同的解析规则，或使用全局规则
-                    </p>
-                  </div>
-
-                  <!-- Global Parsing Rules -->
-                  <div class="form-group full-width mb-4">
-                    <h4 class="section-title">全局解析规则</h4>
-                    <p class="section-description">
-                      应用于所有步骤的默认解析规则
-                    </p>
-
-                    <!-- JSONPath for API responses -->
-                    <div class="rule-section mb-4">
-                      <Label>JSONPath 规则 (API)</Label>
-                      <Textarea
-                        v-model="jsonpath"
-                        placeholder="$.data.items[*].title, $.results[0].id"
-                        rows="3"
-                      />
-                    </div>
-
-                    <!-- CSS/XPath for HTML -->
-                    <div class="rule-section mb-4">
-                      <Label>CSS Selector</Label>
-                      <Textarea
-                        v-model="globalParsingRules.css_selector"
-                        placeholder=".product-item, .article"
-                        rows="3"
-                      />
-                    </div>
-
-                    <div class="rule-section mb-4">
-                      <Label>XPath</Label>
-                      <Textarea
-                        v-model="globalParsingRules.xpath"
-                        placeholder="//div[@class='content']"
-                        rows="3"
-                      />
-                    </div>
-
-                    <!-- Regex for text extraction -->
-                    <div class="rule-section mb-4">
-                      <Label>正则表达式 (Regex)</Label>
-                      <Textarea
-                        v-model="globalParsingRules.regex"
-                        placeholder='价格: "\$(\\d+\\.\\d{2})"\n日期: "(\\d{4}-\\d{2}-\\d{2})"'
-                        rows="4"
-                      />
-                    </div>
-
-                    <!-- JSON Schema for structured data -->
-                    <div class="rule-section mb-4">
-                      <Label>JSON Schema 规则</Label>
-                      <Textarea
-                        v-model="globalParsingRules.json_schema"
-                        placeholder="{...}"
-                        rows="6"
-                      />
-                    </div>
-                  </div>
-
-                  <!-- Step-specific Parsing Rules -->
-                  <div class="form-group full-width">
-                    <h4 class="section-title">步骤级解析规则</h4>
-                    <p class="section-description">
-                      为每个步骤单独配置解析规则（覆盖全局规则）
-                    </p>
-
-                    <div
-                      v-for="(step, index) in steps"
-                      :key="`parsing-${step.id}`"
-                      class="step-parsing-rule mb-4 p-3 bg-gray-50 rounded"
-                    >
-                      <h5 class="step-parsing-title">
-                        步骤 {{ index + 1 }}: {{ step.name || "未命名" }}
-                      </h5>
-
-                      <!-- JSONPath for API responses -->
-                      <div class="rule-section mb-2">
-                        <Label>JSONPath 规则 (API)</Label>
-                        <Textarea
-                          v-model="jsonpath"
-                          placeholder="$['products'][0]['name']"
-                          rows="2"
-                        />
-                      </div>
-
-                      <!-- CSS/XPath for HTML -->
-                      <div class="rule-section mb-2">
-                        <Label>CSS Selector</Label>
-                        <Textarea
-                          v-model="(step.parsing_rules as ParsingRule).css_selector"
-                          placeholder=".product-item, .article"
-                          rows="2"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <!-- Multi-Parser Rules Tab -->
-              <TabsContent value="multi-parser">
-                <div class="p-6">
-                  <h3 class="text-lg font-semibold mb-4">多解析器规则</h3>
-                  <p class="text-sm text-gray-600 mb-6">
-                    为每个步骤配置多个独立的解析器规则，支持JSONPath、CSS选择器、XPath和正则表达式
-                  </p>
-
-                  <!-- Step-specific Multi-Parser Rules -->
-                  <div class="form-group full-width">
-                    <h4 class="section-title mb-2">步骤级多解析器规则</h4>
-                    <p class="section-description text-sm text-gray-600 mb-4">
-                      为每个步骤单独配置多个解析规则（覆盖全局规则）
-                    </p>
-
-                    <div
-                      v-for="(step, stepIndex) in steps"
-                      :key="`multi-parser-${step.id}`"
-                      class="step-multi-parser-container mb-6 p-4 bg-gray-50 rounded border"
-                    >
-                      <h5
-                        class="step-parsing-title text-blue-700 font-medium mb-3"
-                      >
-                        步骤 {{ stepIndex + 1 }}: {{ step.name || "未命名" }}
-                      </h5>
-
-                      <!-- Multi-parser rules list -->
-                      <div
-                        v-if="step.multi_parser_rules.length > 0"
-                        class="rules-list mb-4"
-                      >
-                        <div
-                          v-for="(rule, ruleIndex) in step.multi_parser_rules"
-                          :key="`${step.id}-${rule.id}`"
-                          class="rule-item p-3 bg-white rounded shadow-sm mb-2 border"
-                        >
-                          <div class="flex justify-between items-start mb-2">
-                            <h6 class="font-medium text-blue-800">
-                              规则 {{ ruleIndex + 1 }}: {{ rule.name }}
-                            </h6>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              @click="
-                                step.multi_parser_rules.splice(ruleIndex, 1)
-                              "
-                            >
-                              删除
-                            </Button>
-                          </div>
-
-                          <div
-                            class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2"
-                          >
-                            <!-- Parser Type -->
-                            <div>
-                              <Label>解析器类型</Label>
-                              <Select
-                                v-model="rule.type"
-                                :disabled="step.multi_parser_rules.length === 1"
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="jsonpath"
-                                    >JSONPath</SelectItem
-                                  >
-                                  <SelectItem value="css">CSS选择器</SelectItem>
-                                  <SelectItem value="xpath">XPath</SelectItem>
-                                  <SelectItem value="regex"
-                                    >正则表达式</SelectItem
-                                  >
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            <!-- Output Field -->
-                            <div>
-                              <Label>输出字段</Label>
-                              <Input
-                                v-model="rule.output_field"
-                                placeholder="data.items"
-                              />
-                            </div>
-                          </div>
-
-                          <!-- Expression based on type -->
-                          <div class="mb-2">
-                            <Label>表达式</Label>
-                            <Textarea
-                              v-model="rule.expression"
-                              :placeholder="getParserPlaceholder(rule.type)"
-                              rows="3"
-                            />
-                          </div>
-
-                          <!-- Description -->
-                          <div class="mb-2">
-                            <Label>描述 (可选)</Label>
-                            <Input
-                              v-model="rule.description"
-                              placeholder="此规则用于提取..."
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- Add new rule button -->
-                      <Button
-                        size="sm"
-                        class="mb-4"
-                        @click="addMultiParserRule(stepIndex)"
-                      >
-                        <PlusIcon class="w-4 h-4 mr-2" />
-                        添加新解析规则
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
+                <TabsContent value="multi-parser" class="mt-0">
+                  <MultiParserTab
+                    :steps="steps"
+                    @add-rule="addMultiParserRule"
+                    @remove-rule="
+                      (stepIndex, ruleIndex) =>
+                        steps[stepIndex].multi_parser_rules.splice(ruleIndex, 1)
+                    "
+                  />
+                </TabsContent>
+              </div>
             </Tabs>
           </div>
 
@@ -660,24 +249,96 @@
       <component :is="getAlertIcon(messageType)" class="h-4 w-4" />
       {{ message }}
     </Alert>
+
+    <!-- Batch Import Dialog -->
+    <Dialog v-model:open="isImportDialogOpen">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>批量导入爬虫配置</DialogTitle>
+          <DialogDescription>
+            请上传包含多个爬虫配置的JSON文件。每个配置将被创建为独立的记录。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="py-4">
+          <Input
+            type="file"
+            accept=".json"
+            @change="handleFileChange"
+            ref="importFileInput"
+          />
+        </div>
+
+        <div v-if="isImporting" class="flex items-center justify-center py-4">
+          <Loader2Icon class="mr-2 h-5 w-5 animate-spin" />
+          正在导入... {{ importProgress }}%
+        </div>
+
+        <div
+          v-if="importResult && !isImporting"
+          class="mt-4 p-3 bg-gray-50 rounded"
+        >
+          <p class="text-sm font-medium">导入结果:</p>
+          <p class="text-sm mt-1">成功: {{ importResult.successCount }}</p>
+          <p class="text-sm">失败: {{ importResult.errorCount }}</p>
+          <div
+            v-if="importResult.errors.length > 0"
+            class="mt-2 text-xs text-red-600"
+          >
+            <p>错误详情:</p>
+            <ul class="list-disc list-inside mt-1">
+              <li v-for="(error, index) in importResult.errors" :key="index">
+                {{ error }}
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-6">
+          <Button
+            type="button"
+            variant="outline"
+            @click="isImportDialogOpen = false"
+            :disabled="isImporting"
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            @click="parseAndImportConfig()"
+            :disabled="!importFile || isImporting"
+          >
+            <Loader2Icon v-if="isImporting" class="mr-2 h-4 w-4 animate-spin" />
+            确认导入
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from "vue";
+import { useScraperConfig } from "@/composables/useScraperConfig";
 import { format } from "date-fns";
-import {
-  getVehicleConfigs,
-  getVehicleConfigById,
-  createVehicleConfig,
-  updateVehicleConfig,
-  executeVehicleScrape,
-  testVehicleConnection,
-  deleteVehicleConfig,
-} from "@/api/vehicles";
+import { onMounted, watch } from "vue";
 
-// UI Components (shadcn-vue: 每个组件从自己的目录导入)
+// 子组件引入
+import BasicSettingsTab from "@/components/scraper/BasicSettingsTab.vue";
+import MultiParserTab from "@/components/scraper/MultiParserTab.vue";
+import ParsingRulesTab from "@/components/scraper/ParsingRulesTab.vue";
+import StepsWorkflowTab from "@/components/scraper/StepsWorkflowTab.vue";
+
+// UI Components
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -686,726 +347,69 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Alert } from "@/components/ui/alert";
-import { Card } from "@/components/ui/card";
 
 // Icons
 import {
-  PlusIcon,
-  FolderOpenIcon,
-  RefreshCwIcon,
-  PlayIcon,
-  ZapIcon,
-  SaveIcon,
-  RotateCcwIcon,
-  FileSearchIcon,
-  Loader2Icon,
-  CheckCircle2,
   AlertCircle,
+  CheckCircle2,
+  FileSearchIcon,
+  FolderOpenIcon,
   Info,
-  CopyIcon,
+  Loader2Icon,
+  PlayIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  RotateCcwIcon,
+  SaveIcon,
   Trash2Icon,
+  ZapIcon,
 } from "@lucide/vue";
 
-// ---------- State ----------
-interface Project {
-  id: string;
-  name: string;
-}
-
-interface VehicleConfig {
-  id?: string;
-  name: string;
-  cron_schedule: string;
-  user_agent: string;
-  concurrency: number;
-  timeout: number;
-  proxy: string;
-  target_url: string;
-  status?: "active" | "inactive" | "error";
-  created_at?: string;
-  updated_at?: string;
-}
-
-const configs = ref<VehicleConfig[]>([]);
-const projects = ref<Project[]>([
-  { id: "1", name: "车辆数据爬虫" },
-  { id: "2", name: "商品价格监控" },
-  { id: "3", name: "新闻文章采集" },
-]);
-const selectedProjectId = ref("1");
-// Select 的 value 必须是字符串,所以 id 统一用 string 保存
-const selectedConfigId = ref<string | null>(null);
-const selectedConfig = ref<VehicleConfig | null>(null);
-const activeTab = ref("basic");
-const isLoading = ref(true);
-const creatingNewConfig = ref(false);
-const message = ref("");
-const messageType = ref<"info" | "success" | "error">("info");
-const jsonpath = ref<string>("");
-
-// Step interface for the new workflow system
-interface ParsingRule {
-  id?: string;
-  name: string;
-  jsonpath?: string;
-  css_selector?: string;
-  xpath?: string;
-  regex?: string;
-  output_field: string;
-  required?: boolean;
-}
-
-interface MultiParserRule {
-  id: string;
-  name: string;
-  type: "jsonpath" | "css" | "xpath" | "regex";
-  expression: string;
-  output_field: string;
-  description?: string;
-}
-
-interface Step {
-  id: string;
-  name: string;
-  mode: "api" | "playwright";
-  url: string;
-  method: string;
-  params_json: string;
-  headers_json: string;
-  wait_selector?: string;
-  script?: string;
-  parsing_rules: ParsingRule | ParsingRule[];
-  multi_parser_rules: MultiParserRule[];
-  delay?: number;
-  retry_count?: number;
-}
-
-const steps = ref<Step[]>([
-  {
-    id: "step1",
-    name: "初始请求",
-    mode: "api",
-    url: "",
-    method: "GET",
-    params_json: "{}",
-    headers_json: "{}",
-    parsing_rules: {
-      name: "默认解析规则",
-      output_field: "model_name",
-    },
-    multi_parser_rules: [],
-  },
-]);
-
-const globalParsingRules = ref<ParsingRule[]>([]);
-
-interface FormData {
-  name: string;
-  cron_schedule: string;
-  user_agent: string;
-  concurrency: number;
-  timeout: number;
-  proxy: string;
-  target_url: string;
-}
-
-// API Response Interfaces
-interface ApiResponse<T> {
-  data: T;
-  status: number;
-  message?: string;
-}
-
-interface ErrorResponse {
-  error: string;
-  message: string;
-  statusCode: number;
-}
-
-const DEFAULT_USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
-
-const createDefaultForm = (): FormData => ({
-  name: "",
-  cron_schedule: "",
-  user_agent: DEFAULT_USER_AGENT,
-  concurrency: 5,
-  timeout: 30,
-  proxy: "",
-  target_url: "",
-});
-
-const formData = ref<FormData>(createDefaultForm());
-
-// ---------- Step Management ----------
-const addStep = (): void => {
-  const newStep: Step = {
-    id: `step${steps.value.length + 1}`,
-    name: `步骤 ${steps.value.length + 1}`,
-    mode: "api",
-    url: "",
-    method: "GET",
-    params_json: "{}",
-    headers_json: "{}",
-    parsing_rules: [] as ParsingRule[],
-    multi_parser_rules: [],
-  };
-  steps.value.push(newStep);
-};
-
-const removeStep = (index: number): void => {
-  if (steps.value.length > 1) {
-    steps.value.splice(index, 1);
-  }
-};
-
-const duplicateStep = (index: number): void => {
-  const stepToDuplicate = steps.value[index];
-  const newStep: Step = {
-    id: `step${steps.value.length + 1}`,
-    name: `${stepToDuplicate.name} (副本)`,
-    mode: stepToDuplicate.mode,
-    url: stepToDuplicate.url,
-    method: stepToDuplicate.method,
-    params_json: stepToDuplicate.params_json,
-    headers_json: stepToDuplicate.headers_json,
-    wait_selector: stepToDuplicate.wait_selector,
-    script: stepToDuplicate.script,
-    parsing_rules: stepToDuplicate.parsing_rules,
-    multi_parser_rules: [...stepToDuplicate.multi_parser_rules],
-  };
-  steps.value.splice(index + 1, 0, newStep);
-};
-
-// ---------- Multi-Parser Rule Management ----------
-const addMultiParserRule = (stepIndex: number): void => {
-  const newRuleId = `rule-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-  const newRule: MultiParserRule = {
-    id: newRuleId,
-    name: "新规则",
-    type: "jsonpath",
-    expression: "",
-    output_field: "",
-  };
-
-  steps.value[stepIndex].multi_parser_rules.push(newRule);
-};
-
-// Drag and drop for reordering steps
-const draggedIndex = ref<number | null>(null);
-
-const handleDragStart = (event: DragEvent, index: number): void => {
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", index.toString());
-  }
-  draggedIndex.value = index;
-};
-
-const handleDragOver = (event: DragEvent, index: number): void => {
-  if (draggedIndex.value === null || draggedIndex.value === index) return;
-  event.preventDefault();
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = "move";
-  }
-};
-
-const handleDragEnter = (event: DragEvent, index: number): void => {
-  if (draggedIndex.value === null || draggedIndex.value === index) return;
-  event.preventDefault();
-};
-
-const handleDrop = (event: DragEvent, targetIndex: number): void => {
-  event.preventDefault();
-  if (draggedIndex.value === null || draggedIndex.value === targetIndex) {
-    draggedIndex.value = null;
-    return;
-  }
-
-  const items = [...steps.value];
-  const draggedItem = items[draggedIndex.value];
-  items.splice(draggedIndex.value, 1);
-  items.splice(targetIndex, 0, draggedItem);
-  steps.value = items;
-  draggedIndex.value = null;
-};
-
-const handleDragEnd = (): void => {
-  draggedIndex.value = null;
-};
-
-// ---------- Helpers ----------
-let messageTimer: ReturnType<typeof setTimeout> | null = null;
-
-const setMessage = (msg: string, type: "info" | "success" | "error"): void => {
-  message.value = msg;
-  messageType.value = type;
-  if (messageTimer) clearTimeout(messageTimer);
-  messageTimer = setTimeout(() => {
-    message.value = "";
-  }, 5000);
-};
-const showSuccess = (msg: string): void => setMessage(msg, "success");
-const showError = (msg: string): void => setMessage(msg, "error");
-const showInfo = (msg: string): void => setMessage(msg, "info");
-
-const errorText = (error: unknown): string =>
-  error?.response?.data?.detail || error?.message || "未知错误";
-
-const buildPayload = () => {
-  let jsonSchema: unknown = {};
-  const raw = globalParsingRules.value.json_schema?.trim();
-  if (raw) {
-    try {
-      jsonSchema = JSON.parse(raw);
-    } catch {
-      throw new Error("JSON Schema 规则不是合法的 JSON");
-    }
-  }
-
-  debugger;
-  return {
-    ...formData.value,
-    json_schema: jsonSchema,
-    steps: steps.value.map((step: Step) => ({
-      name: step.name,
-      mode: step.mode,
-      target_url: step.url,
-      method: step.method,
-      params_json: step.params_json || '{}',
-      headers_json: step.headers_json || '{}',
-      wait_selector: step.wait_selector,
-      script: step.script,
-      // ✅ 修正點：這裡必須是一個 ParsingRule 物件，而不是陣列
-      parsing_rules: [{
-        name: step.parsing_rule_name || "默认解析规则",
-        output_field: step.output_field || "model_name",
-        jsonpath: jsonpath.value,
-        required: true,
-      }],
-      delay: step.delay ? Number(step.delay) : null,
-      retry_count: step.retry_count ? Number(step.retry_count) : null,
-    })),
-  };
-};
-
-// ---------- API ----------
-const fetchConfigs = async () => {
-  isLoading.value = true;
-  try {
-    const responseData = await getVehicleConfigs();
-
-    let parsedConfigs: VehicleConfig[] = [];
-    if (Array.isArray(responseData)) {
-      parsedConfigs = responseData as VehicleConfig[];
-    } else if (responseData && typeof responseData === "object") {
-      const apiResponse = responseData as ApiResponse<VehicleConfig[]>;
-      parsedConfigs = (apiResponse.data || apiResponse) as VehicleConfig[];
-    }
-
-    configs.value = Array.isArray(parsedConfigs) ? parsedConfigs : [];
-
-    if (selectedConfigId.value) {
-      await loadSelectedConfig();
-    } else if (configs.value.length > 0 && !creatingNewConfig.value) {
-      selectedConfigId.value = String(configs.value[0].id);
-    }
-  } catch (error: any) {
-    showError("加载配置失败: " + errorText(error));
-    console.error("Fetch configs error:", error);
-  } finally {
-    isLoading.value = false;
-  }
-};
-
-const loadSelectedConfig = async () => {
-  if (!selectedConfigId.value) {
-    selectedConfig.value = null;
-    return;
-  }
-
-  try {
-    const response = await getVehicleConfigById(selectedConfigId.value);
-    let data: VehicleConfig;
-
-    // Handle different response formats
-    if (response && typeof response === "object") {
-      const apiResponse = response as ApiResponse<VehicleConfig> | any;
-      data = (apiResponse.data || apiResponse) as VehicleConfig;
-    } else {
-      data = response as VehicleConfig;
-    }
-
-    selectedConfig.value = data;
-
-    formData.value = {
-      name: data.name || "",
-      cron_schedule: data.cron_schedule || "",
-      user_agent: data.user_agent || DEFAULT_USER_AGENT,
-      concurrency: data.concurrency || 5,
-      timeout: data.timeout || 30,
-      proxy: data.proxy || "",
-      target_url: data.target_url || "",
-    };
-
-    globalParsingRules.value = {
-      css_selector: data.css_selector || "",
-      xpath: data.xpath || "",
-      regex: data.regex || "",
-      json_schema: JSON.stringify(
-        data.json_schema || { type: "object" },
-        null,
-        2,
-      ),
-    };
-
-    if (data.steps.length > 0 && Array.isArray(data.steps)) {
-      steps.value = data.steps.map((step: any) => ({
-        id: step.id || `step${step.index || 1}`,
-        name: step.name || "未命名步骤",
-        mode: step.mode || "api",
-        url: step.target_url || "",
-        method: step.method || "GET",
-        params_json:
-          typeof step.params_json === "string"
-            ? step.params
-            : JSON.stringify(step.params || {}),
-        headers_json:
-          typeof step.headers_json === "string"
-            ? step.headers
-            : JSON.stringify(step.headers || {}),
-        wait_selector: step.wait_selector || "",
-        script: step.script || "",
-        parsing_rules: {
-          name: step.parsing_rules?.name || "",
-          output_field: step.parsing_rules?.output_field || "model_name",
-          jsonpath: step.parsing_rules?.jsonpath || "",
-        },
-        // jsonpath: JSON.stringify(
-        //   step.parsing_rules || { type: "object" },
-        //   null,
-        //   2,
-        // ),
-        multi_parser_rules: step.multi_parser_rules || [],
-      }));
-      // 2. 如果你想让页面的 jsonpath 变量显示第一个步骤的内容（或者你选中的步骤）
-      if (steps.value.length > 0) {
-        jsonpath.value = JSON.stringify(
-          steps.value[0].parsing_rules || { type: "object" },
-          null,
-          2,
-        );
-      }
-    } else {
-      steps.value = [];
-
-      if (data.target_url) {
-        steps.value.push({
-          id: "step1",
-          name: "初始请求",
-          mode: "api",
-          url: data.target_url || "",
-          method: "GET",
-          params_json: "{}",
-          headers_json: "{}",
-          parsing_rules: {
-            name: "默认解析规则",
-            output_field: "model_name",
-          },
-          multi_parser_rules: [],
-        });
-      }
-
-      if (steps.value.length === 0) {
-        steps.value = [
-          {
-            id: "step1",
-            name: "初始请求",
-            mode: "api",
-            url: data.target_url || "",
-            method: "GET",
-            params_json: "{}",
-            headers_json: "{}",
-            parsing_rules: {
-              name: "默认解析规则",
-              output_field: "model_name",
-            },
-            multi_parser_rules: [],
-          },
-        ];
-      }
-    }
-  } catch (error: any) {
-    showError("加载配置详情失败: " + errorText(error));
-    selectedConfig.value = null;
-  }
-};
-
-const createConfig = async () => {
-  try {
-    const response = await createVehicleConfig(buildPayload());
-    let newId: string | undefined;
-
-    // Handle different response formats
-    if (response && typeof response === "object") {
-      const apiResponse = response as ApiResponse<{ id: string }> | any;
-      newId = apiResponse.data?.id || apiResponse.id;
-    } else {
-      newId = String(response);
-    }
-
-    showSuccess("配置创建成功!");
-    creatingNewConfig.value = false;
-
-    selectedConfigId.value = newId ? String(newId) : null;
-    await fetchConfigs();
-  } catch (error: any) {
-    showError("创建配置失败: " + errorText(error));
-  }
-};
-
-const updateConfig = async () => {
-  if (!selectedConfigId.value) {
-    showError("请先选择一个配置");
-    return;
-  }
-
-  try {
-    await updateVehicleConfig(selectedConfigId.value, buildPayload());
-    showSuccess("配置更新成功!");
-    await fetchConfigs();
-  } catch (error: any) {
-    showError("更新配置失败: " + errorText(error));
-  }
-};
-
-const saveConfig = () => {
-  // Validate task name
-  if (!formData.value.name.trim()) {
-    showError("请填写任务名称");
-    return;
-  }
-
-  // Validate steps exist and have required fields
-  if (steps.value.length === 0) {
-    showError("至少需要一个步骤");
-    return;
-  }
-
-  // Validate each step has required fields based on mode
-  for (let i = 0; i < steps.value.length; i++) {
-    const step = steps.value[i];
-
-    if (!step.url.trim()) {
-      showError(`步骤 ${i + 1} 的 URL 不能为空`);
-      return;
-    }
-
-    // Validate method for API mode
-    if (step.mode === "api" && !step.method) {
-      showError(`步骤 ${i + 1} 的请求方法不能为空`);
-      return;
-    }
-
-    // Validate params_json is valid JSON
-    if (step.mode === "api") {
-      try {
-        JSON.parse(step.params_json);
-      } catch (e) {
-        showError(`步骤 ${i + 1} 的请求参数不是有效的 JSON`);
-        return;
-      }
-    }
-
-    // Validate headers_json is valid JSON for API mode
-    if (step.mode === "api") {
-      try {
-        JSON.parse(step.headers_json);
-      } catch (e) {
-        showError(`步骤 ${i + 1} 的 Headers 不是有效的 JSON`);
-        return;
-      }
-    }
-
-    // Validate concurrency and timeout are positive numbers
-    if (
-      formData.value.concurrency &&
-      (formData.value.concurrency < 1 || formData.value.concurrency > 50)
-    ) {
-      showError("并发数必须在 1-50 之间");
-      return;
-    }
-
-    if (
-      formData.value.timeout &&
-      (formData.value.timeout < 5 || formData.value.timeout > 300)
-    ) {
-      showError("超时时间必须在 5-300 秒之间");
-      return;
-    }
-  }
-
-  // Save the configuration
-  if (selectedConfigId.value) {
-    updateConfig();
-  } else {
-    createConfig();
-  }
-};
-
-const executeScrape = async () => {
-  if (!selectedConfigId.value) {
-    showError("请先选择一个配置");
-    return;
-  }
-
-  try {
-    // Get the current config to extract multi_parser_rules
-    const config = configs.value.find((c) => c.id === selectedConfigId.value);
-    let parsingRules = undefined;
-
-    if (config && config.steps) {
-      // Collect all multi_parser_rules from steps
-      const stepRules = steps.value.flatMap((step) => {
-        if (step.mode === "api" || step.mode === "playwright") {
-          return [...(step.multi_parser_rules || [])];
-        }
-        return step.multi_parser_rules || [];
-      });
-
-      if (stepRules.length > 0) {
-        parsingRules = stepRules;
-      }
-    }
-
-    const response: any = await executeVehicleScrape(
-      selectedConfigId.value,
-      parsingRules,
-    );
-    const scrapeId = response?.scrape_id || response?.data?.scrape_id;
-    showSuccess(`爬取任务已启动! ID: ${scrapeId || "未知"}`);
-    await loadSelectedConfig();
-  } catch (error: any) {
-    showError("执行爬取失败: " + errorText(error));
-  }
-};
-
-const testConnection = async () => {
-  if (!selectedConfigId.value) {
-    showError("请先选择一个配置");
-    return;
-  }
-
-  try {
-    const response: any = await testVehicleConnection(selectedConfigId.value);
-    const success = response?.success ?? response?.data?.success;
-    const msg = response?.message ?? response?.data?.message;
-
-    if (success) {
-      showSuccess("连接测试成功!");
-    } else {
-      showError("连接测试失败: " + (msg || "未知原因"));
-    }
-  } catch (error: any) {
-    showError("连接测试失败: " + errorText(error));
-  }
-};
-
-const deleteConfig = async () => {
-  if (!selectedConfigId.value) {
-    showError("请先选择一个配置");
-    return;
-  }
-
-  // Show confirmation dialog
-  const confirmed = confirm(
-    `确定要删除配置 "${selectedConfig.value?.name || "未命名"}" 吗？\n\n注意：此操作无法撤销！`,
-  );
-
-  if (!confirmed) {
-    return;
-  }
-
-  try {
-    await deleteVehicleConfig(selectedConfigId.value);
-    showSuccess("配置删除成功!");
-
-    // Reset selection and refresh list
-    selectedConfigId.value = null;
-    selectedConfig.value = null;
-    creatingNewConfig.value = false;
-    resetForm();
-    await fetchConfigs();
-  } catch (error: any) {
-    showError("删除配置失败: " + errorText(error));
-  }
-};
-
-// ---------- UI handlers ----------
-const resetForm = () => {
-  formData.value = createDefaultForm();
-  steps.value = [
-    {
-      id: "step1",
-      name: "初始请求",
-      mode: "api",
-      url: "",
-      method: "GET",
-      params_json: "{}",
-      headers_json: "{}",
-      parsing_rules: [] as ParsingRule[],
-      multi_parser_rules: [],
-    },
-  ];
-  globalParsingRules.value = {
-    jsonpath: "",
-    css_selector: "",
-    xpath: "",
-    regex: "",
-    json_schema: JSON.stringify({ type: "object" }, null, 2),
-  };
-};
-
-const showCreateConfigForm = () => {
-  creatingNewConfig.value = true;
-  selectedConfigId.value = null;
-  selectedConfig.value = null;
-  activeTab.value = "basic";
-  resetForm();
-};
-
-const handleBatchImport = () => {
-  showInfo("批次导入功能将在后续版本中支持");
-};
-
-const refreshConfigs = async () => {
-  await fetchConfigs();
-  showSuccess("配置列表已刷新");
-};
-
-watch(selectedConfigId, (id) => {
-  if (id) {
-    creatingNewConfig.value = false;
-    loadSelectedConfig();
-  }
-});
-
-watch(selectedProjectId, (id) => {
-  showInfo(
-    "切换到项目: " + (projects.value.find((p) => p.id === id)?.name ?? ""),
-  );
-  selectedConfigId.value = null;
-  selectedConfig.value = null;
-  resetForm();
-  fetchConfigs();
-});
-
-// ---------- Display helpers ----------
+// 从 Composable 引入狀態與方法
+const {
+  configs,
+  projects,
+  selectedProjectId,
+  selectedConfigId,
+  selectedConfig,
+  activeTab,
+  isLoading,
+  creatingNewConfig,
+  message,
+  messageType,
+  formData,
+  steps,
+  globalParsingRules,
+  jsonpath,
+  fetchConfigs,
+  loadSelectedConfig,
+  resetForm,
+  saveConfig,
+  executeScrape,
+  testConnection,
+  deleteConfig,
+  addStep,
+  removeStep,
+  duplicateStep,
+  addMultiParserRule,
+  handleDragStart,
+  handleDragOver,
+  handleDragEnter,
+  handleDragEnd,
+  handleDrop,
+  refreshConfigs,
+  handleBatchImport,
+  isImportDialogOpen,
+  handleFileChange,
+  parseAndImportConfig,
+  isImporting,
+  importProgress,
+  importFile,
+  importResult,
+  showCreateConfigForm,
+} = useScraperConfig();
+
+// 顯示輔助函數
 const formatDate = (dateString: string) => {
   try {
     return format(new Date(dateString), "yyyy-MM-dd HH:mm:ss");
@@ -1454,6 +458,20 @@ const getAlertIcon = (type: string) => {
   }
 };
 
+watch(selectedConfigId, (id) => {
+  if (id) {
+    creatingNewConfig.value = false;
+    loadSelectedConfig();
+  }
+});
+
+watch(selectedProjectId, () => {
+  selectedConfigId.value = null;
+  selectedConfig.value = null;
+  resetForm();
+  fetchConfigs();
+});
+
 onMounted(() => {
   fetchConfigs();
 });
@@ -1464,13 +482,11 @@ onMounted(() => {
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
-  /* 抵消 Vite 模板 #app { text-align: center } 的影响 */
   text-align: left;
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
     Cantarell, sans-serif;
 }
-
 .header-toolbar {
   display: flex;
   justify-content: space-between;
@@ -1479,41 +495,33 @@ onMounted(() => {
   padding-bottom: 16px;
   border-bottom: 1px solid #e5e7eb;
 }
-
 .header-left {
   flex: 1;
 }
-
 .page-title {
   color: #1e3a8a;
   font-size: 24px;
   font-weight: 600;
   margin-bottom: 4px;
 }
-
 .page-description {
   color: #6b7280;
   font-size: 14px;
 }
-
 .header-right {
   display: flex;
   align-items: center;
   gap: 16px;
 }
-
 .action-buttons {
   display: flex;
   gap: 8px;
 }
-
 .main-content {
   background: white;
   border-radius: 12px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  /* 不能用 overflow: hidden,否则会裁切下拉面板 */
 }
-
 .loading-state,
 .empty-state {
   display: flex;
@@ -1523,50 +531,41 @@ onMounted(() => {
   padding: 60px 20px;
   gap: 16px;
 }
-
 .empty-state {
   text-align: center;
 }
-
 .loading-spinner {
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 .loading-text {
   color: #6b7280;
   font-size: 16px;
 }
-
 .empty-icon {
   color: #d1d5db;
 }
-
 .empty-title {
   font-size: 18px;
   font-weight: 600;
   color: #374151;
 }
-
 .empty-description {
   color: #6b7280;
   margin-bottom: 24px;
 }
-
 .dashboard-layout {
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 24px;
   padding: 24px;
 }
-
 .sidebar {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-
 .config-overview-card {
   background: white;
   border: 1px solid #e5e7eb;
@@ -1574,20 +573,17 @@ onMounted(() => {
   padding: 20px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
-
 .card-title {
   font-size: 16px;
   font-weight: 600;
   color: #374151;
   margin-bottom: 16px;
 }
-
 .status-badge-container {
   display: flex;
   justify-content: center;
   margin-bottom: 20px;
 }
-
 .status-badge {
   padding: 6px 12px;
   border-radius: 9999px;
@@ -1598,43 +594,35 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
 }
-
 .config-selector {
   margin-bottom: 20px;
 }
-
 .execution-stats {
   display: flex;
   flex-direction: column;
   gap: 12px;
   margin-bottom: 20px;
 }
-
 .stat-item {
   display: flex;
   justify-content: space-between;
   font-size: 14px;
 }
-
 .stat-label {
   color: #6b7280;
 }
-
 .stat-value {
   color: #374151;
   font-weight: 500;
 }
-
 .success-rate {
   color: #16a34a;
 }
-
 .quick-actions {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-
 .main-content-area {
   background: white;
   border: 1px solid #e5e7eb;
@@ -1643,29 +631,9 @@ onMounted(() => {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   min-width: 0;
 }
-
 .config-tabs {
   margin-bottom: 24px;
 }
-
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  text-align: left;
-}
-
-.full-width {
-  grid-column: 1 / -1;
-}
-
 .footer-actions {
   display: flex;
   justify-content: flex-end;
@@ -1673,87 +641,15 @@ onMounted(() => {
   padding-top: 20px;
   border-top: 1px solid #e5e7eb;
 }
-
-/* Step Cards Styles */
-.step-card {
-  transition: all 0.2s ease;
-  cursor: move;
-}
-
-.step-card:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-
-.step-card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.step-name {
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.steps-container {
-  margin-top: 16px;
-}
-
-/* Parsing Rules Styles */
-.section-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #374151;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.section-title::before {
-  content: "";
-  width: 4px;
-  height: 16px;
-  background-color: #3b82f6;
-  border-radius: 2px;
-}
-
-.step-description,
-.rule-description,
-.section-description {
-  color: #6b7280;
-  font-size: 14px;
-  margin-bottom: 16px;
-}
-
-.step-parsing-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #374151;
-  margin-bottom: 12px;
-}
-
-.rule-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 @media (max-width: 768px) {
   .dashboard-layout {
     grid-template-columns: 1fr;
   }
-
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-
   .header-toolbar {
     flex-direction: column;
     align-items: flex-start;
     gap: 16px;
   }
-
   .header-right {
     width: 100%;
     flex-wrap: wrap;
