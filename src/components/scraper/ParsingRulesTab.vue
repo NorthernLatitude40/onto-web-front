@@ -80,14 +80,14 @@
           步骤 {{ index + 1 }}: {{ step.name || "未命名" }}
         </h5>
 
-        <!-- JSONPath for API responses -->
+        <!-- JSONPath for API responses (支持安全的 JSON 自由编辑) -->
         <div class="rule-section mb-2">
-          <Label>JSONPath 规则 (API)</Label>
+          <Label>JSONPath 规则 (JSON 编辑)</Label>
           <Textarea
-            :model-value="jsonpath"
-            @update:model-value="$emit('update:jsonpath', $event)"
+            :model-value="getStepJsonText(step.parsing_rules)"
+            @update:model-value="(val) => handleStepJsonInput(index, val)"
             placeholder="$['products'][0]['name']"
-            rows="2"
+            rows="8"
           />
         </div>
 
@@ -109,11 +109,46 @@
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-defineProps<{
+const props = defineProps<{
   steps: any[];
   globalParsingRules: any;
   jsonpath: string;
+  parsing_rules: any;
 }>();
 
-defineEmits(["update:jsonpath", "update:globalParsingRules"]);
+const emit = defineEmits([
+  "update:jsonpath",
+  "update:parsing_rules",
+  "update:globalParsingRules",
+  "update:steps",
+]);
+
+// 将步骤规则对象转换为美化的 JSON 字符串供文本框展示
+const getStepJsonText = (parsingRules: any) => {
+  try {
+    return JSON.stringify(parsingRules, null, 2);
+  } catch (e) {
+    return "";
+  }
+};
+
+// 处理步骤 JSON 文本框的输入
+const handleStepJsonInput = (index: number, val: string) => {
+  try {
+    // 尝试解析用户输入的 JSON 字符串
+    const parsedObj = JSON.parse(val);
+
+    // 如果解析成功，克隆 steps 数组并更新对应步骤的 parsing_rules
+    const newSteps = [...props.steps];
+    newSteps[index] = {
+      ...newSteps[index],
+      parsing_rules: parsedObj,
+    };
+
+    // 发射事件通知父组件更新 steps
+    emit("update:steps", newSteps);
+  } catch (e) {
+    // 如果用户正在输入中（例如 JSON 格式还不完整），捕获错误不进行中断，允许继续打字
+  }
+};
 </script>

@@ -28,6 +28,18 @@ export const getVehicleConfigById = async (id: string) => {
 };
 
 /**
+ * Get a specific vehicle config by group ID
+ * @param id - The group ID to retrieve
+ * @returns Promise with the vehicle config data
+ */
+export const getVehicleConfigByGroupId = async (id: string) => {
+    const response = await service.get(`/vehicles/scrape/select_configs/${id}`, {
+        timeout: 30000 // 延长到 30 秒
+    });
+    return response;
+};
+
+/**
  * Create a new vehicle config
  * @param data - The config data to create
  * @returns Promise with the created config
@@ -95,7 +107,7 @@ export interface Project {
 // 1. 獲取車輛爬蟲專案/群組列表
 export const getVehicleProjects = async () => {
     const response = await service.get<Project[]>('/scraper_projects/projects');
-    return response.data;
+    return response;
 };
 
 // 2. 創建車輛爬蟲專案/群組
@@ -113,6 +125,12 @@ export const updateVehicleProject = async (id: string | number, data: { name?: s
 // 4. 刪除車輛爬蟲專案/群組
 export const deleteVehicleProject = async (id: string | number) => {
     const response = await service.delete(`/scraper_projects/projects/${id}`);
+    return response.data;
+};
+
+// 5. 删除车辆爬虫分组
+export const deleteVehicleGroup = async (groupName: string) => {
+    const response = await service.delete(`/api/v1/scraper/groups/${encodeURIComponent(groupName)}`);
     return response.data;
 };
 

@@ -3,10 +3,11 @@ import {
     createVehicleConfig,
     createVehicleProject,
     deleteVehicleConfig, // 新增：後端獲取專案列表 API
+    deleteVehicleGroup,
     deleteVehicleProject,
-    executeVehicleScrape,
+    executeVehicleScrape, // 新增：後端創建專案 API
+    getVehicleConfigByGroupId,
     getVehicleConfigById,
-    getVehicleConfigs, // 新增：後端創建專案 API
     getVehicleProjects,
     testVehicleConnection,
     updateVehicleConfig
@@ -37,7 +38,7 @@ export interface Step {
     id: string
     name: string
     mode: 'api' | 'playwright'
-    url: string
+    target_url: string
     method: string
     params_json: string
     headers_json: string
@@ -74,6 +75,7 @@ export function useScraperConfig() {
     const message = ref('')
     const messageType = ref<'info' | 'success' | 'error'>('info')
     const jsonpath = ref<string>('')
+    const parsing_rules = ref<ParsingRule>({ name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' })
 
     const formData = ref({
         name: '',
@@ -90,11 +92,11 @@ export function useScraperConfig() {
             id: 'step1',
             name: '初始请求',
             mode: 'api',
-            url: '',
+            target_url: '',
             method: 'GET',
             params_json: '{}',
             headers_json: '{}',
-            parsing_rules: { name: '默认解析规则', output_field: 'model_name' },
+            parsing_rules: { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' },
             multi_parser_rules: [],
         },
     ])
@@ -138,11 +140,11 @@ export function useScraperConfig() {
             id: 'step1',
             name: '初始请求',
             mode: 'api',
-            url: '',
+            target_url: '',
             method: 'GET',
             params_json: '{}',
             headers_json: '{}',
-            parsing_rules: { name: '默认解析规则', output_field: 'model_name' },
+            parsing_rules: { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' },
             multi_parser_rules: [],
         }]
         globalParsingRules.value = {
@@ -151,6 +153,8 @@ export function useScraperConfig() {
             regex: '',
             json_schema: JSON.stringify({ type: 'object' }, null, 2),
         }
+        jsonpath.value = ''
+        parsing_rules.value = { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' }
     }
 
     // 載入專案/群組列表
@@ -197,16 +201,11 @@ export function useScraperConfig() {
     const fetchConfigs = async () => {
         isLoading.value = true
         try {
-            // 先確保專案列表最新
-            await fetchProjects()
-
-            const res = await getVehicleConfigs(selectedProjectId.value)
+            const res = await getVehicleConfigByGroupId(selectedProjectId.value)
+            // const res = await getVehicleConfigs()
             configs.value = Array.isArray(res) ? res : (res?.data || [])
-            if (selectedConfigId.value) {
-                await loadSelectedConfig()
-            } else if (configs.value.length > 0 && !creatingNewConfig.value) {
-                selectedConfigId.value = String(configs.value[0].id)
-                await loadSelectedConfig()
+            if (!selectedConfigId.value && configs.value.length > 0 && !creatingNewConfig.value) {
+                selectedConfigId.value = String(configs.value[0].id);
             }
         } catch (error: any) {
             showError('加载配置失败: ' + (error?.message || '未知错误'))
@@ -242,16 +241,17 @@ export function useScraperConfig() {
                     id: step.id || `step${idx + 1}`,
                     name: step.name || '未命名步骤',
                     mode: step.mode || 'api',
-                    url: step.target_url || step.url || '',
+                    target_url: step.target_url || '',
                     method: step.method || 'GET',
                     params_json: typeof step.params_json === 'string' ? step.params_json : JSON.stringify(step.params || {}),
                     headers_json: typeof step.headers_json === 'string' ? step.headers_json : JSON.stringify(step.headers || {}),
                     wait_selector: step.wait_selector || '',
                     script: step.script || '',
-                    parsing_rules: step.parsing_rules || { name: '默认解析规则', output_field: 'model_name' },
+                    parsing_rules: step.parsing_rules || { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' },
                     multi_parser_rules: step.multi_parser_rules || [],
                 }))
                 jsonpath.value = steps.value[0]?.parsing_rules?.jsonpath || ''
+                parsing_rules.value = steps.value[0]?.parsing_rules || { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' }
             }
         } catch (error: any) {
             showError('加载配置详情失败: ' + (error?.message || '未知错误'))
@@ -261,7 +261,7 @@ export function useScraperConfig() {
     // 組裝 Payload 資料結構以符合後端要求
     const buildPayload = () => {
         return {
-            project_id: selectedProjectId.value, // 關聯當前選中的專案/群組 ID
+            group_id: selectedProjectId.value, // 關聯當前選中的專案/群組 ID
             ...formData.value,
             steps: steps.value.map(step => ({
                 ...step,
@@ -379,7 +379,7 @@ export function useScraperConfig() {
 
         try {
             // 调用后端 API 删除分组
-            await api.delete(`/api/v1/scraper/groups/${encodeURIComponent(groupName)}`)
+            await deleteVehicleGroup(groupName)
 
             // 更新前端列表 - 移除该分组下的所有项目
             projects.value = projects.value.filter(p => p.group !== groupName)
@@ -397,7 +397,7 @@ export function useScraperConfig() {
             id: `step${steps.value.length + 1}`,
             name: `新步骤 ${steps.value.length + 1}`,
             mode: 'api',
-            url: '',
+            target_url: '',
             method: 'GET',
             params_json: '{}',
             headers_json: '{}',
@@ -485,7 +485,7 @@ export function useScraperConfig() {
     return {
         configs, projects, selectedProjectId, selectedConfigId, selectedConfig,
         activeTab, isLoading, creatingNewConfig, message, messageType,
-        formData, steps, globalParsingRules, jsonpath,
+        formData, steps, globalParsingRules, jsonpath, parsing_rules,
         isImportDialogOpen, isImporting, importProgress, importFile, importResult,
         fetchProjects, createProject, deleteProject, deleteGroup, fetchConfigs, loadSelectedConfig, resetForm,
         showSuccess, showError, showInfo, saveConfig, executeScrape, testConnection,

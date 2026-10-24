@@ -37,7 +37,7 @@ export interface Step {
   id: string;
   name: string;
   mode: 'api' | 'playwright';
-  url: string;
+  target_url: string;
   method: string;
   params_json: string;
   headers_json: string;

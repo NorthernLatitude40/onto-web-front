@@ -74,7 +74,7 @@
               <div class="form-group full-width mb-3">
                 <Label>请求 URL</Label>
                 <Input
-                  v-model="step.url"
+                  v-model="step.target_url"
                   placeholder="https://example.com/api/endpoint"
                 />
               </div>
@@ -118,7 +118,7 @@
               <div class="form-group full-width mb-3">
                 <Label>页面 URL</Label>
                 <Input
-                  v-model="step.url"
+                  v-model="step.target_url"
                   placeholder="https://example.com/page"
                 />
               </div>

@@ -3,7 +3,7 @@
     <!-- Header Toolbar -->
     <div class="header-toolbar">
       <div class="header-left">
-        <h1 class="page-title">爬虫配置管理</h1>
+        <h1 class="page-title">配置管理</h1>
         <p class="page-description">
           管理和执行网络爬虫任务,设置目标URL、请求参数、解析规则等
         </p>
@@ -17,44 +17,45 @@
               <SelectValue placeholder="选择爬虫项目..." />
             </SelectTrigger>
             <SelectContent position="popper">
-              <!-- Project Items with Delete (Grouped by group field) -->
               <!-- 无分组的项目 -->
               <template v-for="project in projects" :key="project.id">
-                <div v-if="!project.group">
-                  <SelectItem :value="String(project.id)">
-                    <div
-                      class="flex items-center justify-between w-full px-2 py-1.5 text-sm rounded-sm hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <span>{{ project.name }}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="h-6 w-6 text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                        @click.stop="handleProjectDelete(project.id)"
-                      >
-                        <Trash2Icon class="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+                <div
+                  v-if="project"
+                  class="relative group flex items-center w-full"
+                >
+                  <!-- 1. 讓 SelectSelectItem 佔滿整行，但預留右側按鈕的空間 (pr-8) -->
+                  <SelectItem :value="String(project.id)" class="w-full pr-8">
+                    <span class="truncate">{{ project.name }}</span>
                   </SelectItem>
+
+                  <!-- 2. 使用絕對定位將刪除按鈕固定在右側，移入時才顯示 -->
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="absolute right-1 h-6 w-6 text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity p-0 shrink-0 z-10"
+                    @click.stop.prevent="handleProjectDelete(project.id)"
+                  >
+                    <Trash2Icon class="h-3.5 w-3.5 pointer-events-none" />
+                  </Button>
                 </div>
               </template>
 
               <!-- 按分组显示的项目 -->
-              <template
-                v-for="(groupName, groupProjects) in groupedProjects"
+              <!-- <template
+                v-for="(groupProjects, groupName) in groupedProjects"
                 :key="groupName"
               >
                 <SelectGroup>
                   <div
-                    class="flex items-center justify-between p-2 hover:bg-gray-50 rounded cursor-pointer"
+                    class="flex items-center justify-between p-2 hover:bg-gray-50 rounded group/group-item"
                   >
                     <SelectLabel>{{ groupName }}</SelectLabel>
                     <Button
                       variant="ghost"
                       size="sm"
-                      @click.stop="handleGroupDelete(groupName)"
+                      @click.stop.prevent="handleGroupDelete(String(groupName))"
                       title="删除分组"
-                      class="text-gray-400 opacity-0 hover:opacity-100 transition-opacity hover:text-red-500 h-6 w-6 p-0"
+                      class="text-gray-400 opacity-0 group-hover/group-item:opacity-100 transition-opacity hover:text-red-500 h-6 w-6 p-0 focus:opacity-100"
                     >
                       <Trash2Icon class="h-3.5 w-3.5" />
                     </Button>
@@ -62,14 +63,14 @@
                   <template v-for="project in groupProjects" :key="project.id">
                     <SelectItem :value="String(project.id)">
                       <div
-                        class="flex items-center justify-between w-full px-2 py-1.5 text-sm rounded-sm hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-ring"
+                        class="flex items-center justify-between w-full px-2 py-1.5 text-sm rounded-sm hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-ring group"
                       >
-                        <span>{{ project.name }}</span>
+                        <span class="truncate mr-2">{{ project.name }}</span>
                         <Button
                           variant="ghost"
                           size="sm"
-                          class="h-6 w-6 text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                          @click.stop="handleProjectDelete(project.id)"
+                          class="h-6 w-6 text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity p-0 shrink-0 focus:opacity-100"
+                          @click.stop.prevent="handleProjectDelete(project.id)"
                         >
                           <Trash2Icon class="h-3.5 w-3.5" />
                         </Button>
@@ -77,7 +78,7 @@
                     </SelectItem>
                   </template>
                 </SelectGroup>
-              </template>
+              </template> -->
             </SelectContent>
           </Select>
 
@@ -276,8 +277,9 @@
                 <TabsContent value="parsing" class="mt-0 py-4">
                   <ParsingRulesTab
                     :steps="steps"
+                    @update:steps="steps = $event"
                     :global-parsing-rules="globalParsingRules"
-                    v-model:jsonpath="jsonpath"
+                    v-model:parsing_rules="parsing_rules"
                   />
                 </TabsContent>
 
@@ -413,9 +415,7 @@ import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -457,7 +457,8 @@ const {
   formData,
   steps,
   globalParsingRules,
-  jsonpath,
+  parsing_rules,
+  fetchProjects,
   fetchConfigs,
   loadSelectedConfig,
   resetForm,
@@ -518,6 +519,7 @@ const handleProjectCreated = (newProject: {
 // 处理项目/分组删除
 const handleProjectDelete = async (projectId: string | number) => {
   try {
+    console.log("--------------------------进入删除api调用", projectId);
     await deleteProject(projectId);
   } catch (error) {
     console.error("删除项目失败", error);
@@ -585,6 +587,7 @@ const getAlertIcon = (type: string) => {
 watch(selectedConfigId, (id) => {
   if (id) {
     creatingNewConfig.value = false;
+    resetForm();
     loadSelectedConfig();
   }
 });
@@ -597,7 +600,8 @@ watch(selectedProjectId, () => {
 });
 
 onMounted(() => {
-  fetchConfigs();
+  // 先確保專案列表最新
+  fetchProjects();
 });
 </script>
 
