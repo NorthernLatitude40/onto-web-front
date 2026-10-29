@@ -2,24 +2,19 @@
 import type { SelectItemProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { CheckIcon, Trash2Icon } from '@lucide/vue'
+import { CheckIcon } from '@lucide/vue'
 import { reactiveOmit } from '@vueuse/core'
+import { cn } from 'cn'
 import {
   SelectItem,
   SelectItemIndicator,
   SelectItemText,
   useForwardProps,
 } from 'reka-ui'
-import { cn } from '@/lib/utils'
 
-const props = defineProps<SelectItemProps & {
-  class?: HTMLAttributes['class'],
-  showDeleteIcon?: boolean,
-  itemName?: string,
-  isActive?: boolean
-}>()
+const props = defineProps<SelectItemProps & { class?: HTMLAttributes['class'] }>()
 
-const delegatedProps = reactiveOmit(props, 'class', 'showDeleteIcon', 'itemName', 'isActive')
+const delegatedProps = reactiveOmit(props, 'class')
 
 const forwardedProps = useForwardProps(delegatedProps)
 </script>
@@ -43,20 +38,8 @@ const forwardedProps = useForwardProps(delegatedProps)
       </SelectItemIndicator>
     </span>
 
-    <div class="group relative flex w-full items-center">
-      <SelectItemText class="flex-1">
-        <slot />
-      </SelectItemText>
-      
-      <!-- Delete Icon - shown on hover -->
-      <button
-        v-if="showDeleteIcon"
-        type="button"
-        @click.stop
-        class="absolute right-0 ml-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 hover:text-red-500 text-gray-400"
-      >
-        <Trash2Icon class="h-3.5 w-3.5" />
-      </button>
-    </div>
+    <SelectItemText>
+      <slot />
+    </SelectItemText>
   </SelectItem>
 </template>

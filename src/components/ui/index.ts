@@ -14,6 +14,7 @@ export {
   SelectItem,
   SelectLabel
 } from './select'
+export { Badge } from './badge'
 export {
   Tabs,
   TabsList,

@@ -2,10 +2,10 @@
 import {
     createVehicleConfig,
     createVehicleProject,
-    deleteVehicleConfig, // 新增：後端獲取專案列表 API
+    deleteVehicleConfig,
     deleteVehicleGroup,
     deleteVehicleProject,
-    executeVehicleScrape, // 新增：後端創建專案 API
+    executeVehicleScrape,
     getVehicleConfigByGroupId,
     getVehicleConfigById,
     getVehicleProjects,
@@ -23,6 +23,9 @@ export interface ParsingRule {
     regex?: string
     output_field: string
     required?: boolean
+    // 字段映射 UI 写入的数据
+    mappings?: Array<{ source_key: string; target_field: string }>
+    target_model?: string
 }
 
 export interface MultiParserRule {
@@ -48,6 +51,7 @@ export interface Step {
     multi_parser_rules: MultiParserRule[]
     delay?: number
     retry_count?: number
+    target_model?: string
 }
 
 export interface Project {
@@ -55,9 +59,14 @@ export interface Project {
     name: string
     description?: string
     created_at?: string
+    group?: string
 }
 
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+
+// 步骤 id 必须唯一：界面状态是按 id 存的，用 length+1 在删除步骤后会重复
+const genStepId = () =>
+    `step_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
 export function useScraperConfig() {
     const configs = ref<any[]>([])
@@ -79,12 +88,11 @@ export function useScraperConfig() {
 
     const formData = ref({
         name: '',
-        cron_schedule: '',
-        user_agent: DEFAULT_USER_AGENT,
-        concurrency: 5,
-        timeout: 30,
-        proxy: '',
         target_url: '',
+        headers: {},
+        timeout: 30,
+        is_active: true,
+        mode: 'api',
     })
 
     const steps = ref<Step[]>([
@@ -129,12 +137,11 @@ export function useScraperConfig() {
     const resetForm = () => {
         formData.value = {
             name: '',
-            cron_schedule: '',
-            user_agent: DEFAULT_USER_AGENT,
-            concurrency: 5,
-            timeout: 30,
-            proxy: '',
             target_url: '',
+            headers: {},
+            timeout: 30,
+            is_active: true,
+            mode: 'api',
         }
         steps.value = [{
             id: 'step1',
@@ -174,18 +181,58 @@ export function useScraperConfig() {
         }
     }
 
+    // 載入配置列表（傳入當前選中的 project_id）
+    // 用序号丢弃过期响应，避免快速切换项目时旧请求覆盖新结果
+    let fetchConfigsSeq = 0
+    const fetchConfigs = async () => {
+        const seq = ++fetchConfigsSeq
+
+        if (!selectedProjectId.value) {
+            configs.value = []
+            isLoading.value = false
+            return
+        }
+
+        isLoading.value = true
+        try {
+            const res = await getVehicleConfigByGroupId(selectedProjectId.value)
+            if (seq !== fetchConfigsSeq) return
+            configs.value = Array.isArray(res) ? res : (res?.data || [])
+            if (!selectedConfigId.value && configs.value.length > 0 && !creatingNewConfig.value) {
+                selectedConfigId.value = String(configs.value[0].id);
+            }
+        } catch (error: any) {
+            if (seq !== fetchConfigsSeq) return
+            showError('加载配置失败: ' + (error?.message || '未知错误'))
+        } finally {
+            if (seq === fetchConfigsSeq) isLoading.value = false
+        }
+    }
+
+    // 初始化：页面 onMounted 调用这个，而不是只调用 fetchProjects。
+    // 原因：selectedProjectId 没变化时，页面里 watch(selectedProjectId) 不会触发，
+    // fetchConfigs 永远不会被调用，isLoading 会一直是 true。
+    const init = async () => {
+        const before = selectedProjectId.value
+        await fetchProjects()
+        if (selectedProjectId.value === before) {
+            await fetchConfigs()
+        }
+        // 如果项目 id 变了，页面的 watch 会负责加载
+    }
+
     // 新增：創建專案/群組接口邏輯
     const createProject = async (payload: { name: string; description?: string }) => {
         try {
-            // 調用後端 API 保存
             const res = await createVehicleProject(payload)
             const newProject = res?.data || res || {
                 id: String(Date.now()),
                 ...payload
             }
 
-            // 更新前端列表並選中
-            projects.value.push(newProject)
+            if (!projects.value.some(p => String(p.id) === String(newProject.id))) {
+                projects.value.push(newProject)
+            }
             selectedProjectId.value = String(newProject.id)
 
             showSuccess(`成功创建项目：${newProject.name}`)
@@ -197,47 +244,34 @@ export function useScraperConfig() {
         }
     }
 
-    // 載入配置列表（傳入當前選中的 project_id）
-    const fetchConfigs = async () => {
-        isLoading.value = true
-        try {
-            const res = await getVehicleConfigByGroupId(selectedProjectId.value)
-            // const res = await getVehicleConfigs()
-            configs.value = Array.isArray(res) ? res : (res?.data || [])
-            if (!selectedConfigId.value && configs.value.length > 0 && !creatingNewConfig.value) {
-                selectedConfigId.value = String(configs.value[0].id);
-            }
-        } catch (error: any) {
-            showError('加载配置失败: ' + (error?.message || '未知错误'))
-        } finally {
-            isLoading.value = false
-        }
-    }
-
     // 載入單一詳情
     const loadSelectedConfig = async () => {
-        if (!selectedConfigId.value) {
+        const requestedId = selectedConfigId.value
+        if (!requestedId) {
             selectedConfig.value = null
             return
         }
         try {
-            const res = await getVehicleConfigById(selectedConfigId.value)
+            const res = await getVehicleConfigById(requestedId)
+            // 请求期间用户又切换了配置，丢弃这次结果
+            if (selectedConfigId.value !== requestedId) return
+
             const data = res?.data || res
             selectedConfig.value = data
             creatingNewConfig.value = false
 
             formData.value = {
                 name: data.name || '',
-                cron_schedule: data.cron_schedule || '',
-                user_agent: data.user_agent || DEFAULT_USER_AGENT,
-                concurrency: data.concurrency || 5,
-                timeout: data.timeout || 30,
-                proxy: data.proxy || '',
                 target_url: data.target_url || '',
+                headers: data.headers || {},
+                timeout: data.timeout || 30,
+                is_active: data.is_active !== undefined ? data.is_active : true,
+                mode: data.mode || 'api',
             }
 
             if (data.steps?.length > 0) {
                 steps.value = data.steps.map((step: any, idx: number) => ({
+                    ...step, // 保留 delay、retry_count 等未列出的字段，避免保存时丢失
                     id: step.id || `step${idx + 1}`,
                     name: step.name || '未命名步骤',
                     mode: step.mode || 'api',
@@ -247,11 +281,13 @@ export function useScraperConfig() {
                     headers_json: typeof step.headers_json === 'string' ? step.headers_json : JSON.stringify(step.headers || {}),
                     wait_selector: step.wait_selector || '',
                     script: step.script || '',
-                    parsing_rules: step.parsing_rules || { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' },
+                    parsing_rules: step.parsing_rules || [],
                     multi_parser_rules: step.multi_parser_rules || [],
                 }))
-                jsonpath.value = steps.value[0]?.parsing_rules?.jsonpath || ''
-                parsing_rules.value = steps.value[0]?.parsing_rules || { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' }
+                const firstRulesArray: any[] = steps.value[0]?.parsing_rules || []
+                const firstRule = firstRulesArray.length > 0 ? firstRulesArray[0] : null
+                jsonpath.value = firstRule?.jsonpath || ''
+                parsing_rules.value = firstRule || { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' }
             }
         } catch (error: any) {
             showError('加载配置详情失败: ' + (error?.message || '未知错误'))
@@ -261,8 +297,8 @@ export function useScraperConfig() {
     // 組裝 Payload 資料結構以符合後端要求
     const buildPayload = () => {
         return {
-            group_id: selectedProjectId.value, // 關聯當前選中的專案/群組 ID
             ...formData.value,
+            group_id: selectedProjectId.value,
             steps: steps.value.map(step => ({
                 ...step,
                 params: (() => {
@@ -271,8 +307,7 @@ export function useScraperConfig() {
                 headers: (() => {
                     try { return JSON.parse(step.headers_json) } catch { return {} }
                 })()
-            })),
-            global_parsing_rules: globalParsingRules.value
+            }))
         }
     }
 
@@ -281,12 +316,17 @@ export function useScraperConfig() {
         try {
             const payload = buildPayload()
             if (creatingNewConfig.value || !selectedConfigId.value) {
-                const newConfig = await createVehicleConfig(payload)
+                const res = await createVehicleConfig(payload)
+                // 和其他接口一样，兼容 { data: {...} } 的包装
+                const newConfig = res?.data || res
                 showSuccess('创建配置成功')
                 creatingNewConfig.value = false
+                if (newConfig?.id) {
+                    // 先选中新配置，fetchConfigs 就不会自动选第一个
+                    selectedConfigId.value = String(newConfig.id)
+                }
                 await fetchConfigs()
                 if (newConfig?.id) {
-                    selectedConfigId.value = String(newConfig.id)
                     await loadSelectedConfig()
                 }
             } else {
@@ -352,10 +392,8 @@ export function useScraperConfig() {
         if (!window.confirm('确定要删除这个爬虫项目/分组吗？')) return
 
         try {
-            // 調用後端 API 刪除
             await deleteVehicleProject(projectId)
 
-            // 更新前端列表
             projects.value = projects.value.filter(p => String(p.id) !== String(projectId))
 
             // 如果刪除的是當前選中的專案，重置選擇
@@ -378,10 +416,8 @@ export function useScraperConfig() {
         if (!window.confirm('确定要删除这个分组吗？')) return
 
         try {
-            // 调用后端 API 删除分组
             await deleteVehicleGroup(groupName)
 
-            // 更新前端列表 - 移除该分组下的所有项目
             projects.value = projects.value.filter(p => p.group !== groupName)
 
             showSuccess('删除分组成功')
@@ -394,7 +430,7 @@ export function useScraperConfig() {
 
     const addStep = () => {
         steps.value.push({
-            id: `step${steps.value.length + 1}`,
+            id: genStepId(),
             name: `新步骤 ${steps.value.length + 1}`,
             mode: 'api',
             target_url: '',
@@ -416,9 +452,11 @@ export function useScraperConfig() {
 
     const duplicateStep = (index: number) => {
         const target = steps.value[index]
+        // 深拷贝，避免副本和原步骤共用 parsing_rules / multi_parser_rules
+        const clone = JSON.parse(JSON.stringify(target))
         steps.value.splice(index + 1, 0, {
-            ...target,
-            id: `step${steps.value.length + 1}`,
+            ...clone,
+            id: genStepId(),
             name: `${target.name} (副本)`
         })
     }
@@ -487,7 +525,7 @@ export function useScraperConfig() {
         activeTab, isLoading, creatingNewConfig, message, messageType,
         formData, steps, globalParsingRules, jsonpath, parsing_rules,
         isImportDialogOpen, isImporting, importProgress, importFile, importResult,
-        fetchProjects, createProject, deleteProject, deleteGroup, fetchConfigs, loadSelectedConfig, resetForm,
+        init, fetchProjects, createProject, deleteProject, deleteGroup, fetchConfigs, loadSelectedConfig, resetForm,
         showSuccess, showError, showInfo, saveConfig, executeScrape, testConnection,
         deleteConfig, addStep, removeStep, duplicateStep, addMultiParserRule,
         handleDragStart, handleDragOver, handleDragEnter, handleDragEnd, handleDrop,

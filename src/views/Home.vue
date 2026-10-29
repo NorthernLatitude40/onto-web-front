@@ -105,6 +105,16 @@ const triggerRefresh = () => {
         </button>
       </div>
 
+      <!-- 字段映射演示链接 -->
+      <section class="mb-6">
+        <router-link
+          to="/field-mapping-demo"
+          class="inline-flex items-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg transition shadow-lg shadow-indigo-600/20"
+        >
+          🔗 字段映射 UI 演示
+        </router-link>
+      </section>
+
       <!-- 顶部 Banner 状态统计 -->
       <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="bg-slate-900/80 border border-slate-800 p-5 rounded-xl">

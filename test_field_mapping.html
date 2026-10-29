@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Field Mapping Test</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .required { color: red; font-weight: bold; }
+        .mapped { color: green; }
+        .unmapped { color: orange; }
+    </style>
+</head>
+<body>
+    <h1>Field Mapping Component Test</h1>
+
+    <div id="app">
+        <field-mapping-ui
+            v-model:mappings="currentMappings"
+            :source-fields="sourceFields"
+            :target-fields="targetFields"
+        />
+    </div>
+
+    <script>
+        const { createApp, ref } = Vue;
+
+        // Mock component to test the structure
+        const FieldMappingUI = {
+            props: ['modelValue', 'sourceFields', 'targetFields'],
+            emits: ['update:modelValue'],
+
+            setup(props, { emit }) {
+                const currentMappings = ref([]);
+
+                return {
+                    currentMappings,
+                    handleAutoMap: () => {
+                        console.log('Auto mapping triggered');
+                        // This would be the auto-mapping logic
+                    },
+                    handleReset: () => {
+                        console.log('Reset triggered');
+                        currentMappings.value = [];
+                    }
+                };
+            },
+
+            template: `
+                <div class="field-mapping-container">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2>Field Mapping</h2>
+                        <div class="space-x-2">
+                            <button @click="handleAutoMap" class="px-3 py-1 border rounded">Auto Map</button>
+                            <button @click="handleReset" class="px-3 py-1 border rounded">Reset</button>
+                        </div>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Target Field (Database)</th>
+                                <th>Mapping Type / Source Field</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="targetField in targetFields" :key="targetField.name">
+                                <td>
+                                    <div>{{ targetField.displayName }}</div>
+                                    <div class="text-sm text-gray-500">{{ targetField.name }} ({{ targetField.type }})</div>
+                                    <span v-if="targetField.required" class="required">*</span>
+                                </td>
+                                <td>
+                                    <select v-model="selectedSource[targetField.name]" class="w-full p-2 border rounded">
+                                        <option value="">-- Select Source Field --</option>
+                                        <option value="custom">Custom Value</option>
+                                        <option v-for="source in sourceFields" :key="source.key" :value="source.key">
+                                            {{ source.displayName || source.key }} ({{ source.type }})
+                                        </option>
+                                    </select>
+
+                                    <!-- Custom value input -->
+                                    <input
+                                        v-if="selectedSource[targetField.name] === 'custom'"
+                                        v-model="customValues[targetField.name]"
+                                        type="text"
+                                        placeholder="Enter custom value"
+                                        class="w-full p-2 border rounded mt-1"
+                                    />
+                                </td>
+                                <td>
+                                    <span v-if="isMapped(targetField.name)" class="mapped">✓ Mapped</span>
+                                    <span v-else class="unmapped">⚠ Not mapped</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="mt-4">
+                        <h3>Current Mappings:</h3>
+                        <pre>{{ currentMappings }}</pre>
+                    </div>
+                </div>
+            `,
+
+            data() {
+                return {
+                    selectedSource: {},
+                    customValues: {}
+                };
+            },
+
+            methods: {
+                isMapped(fieldName) {
+                    return this.currentMappings.some(mapping =>
+                        mapping.target_field === fieldName
+                    );
+                }
+            },
+
+            watch: {
+                selectedSource: {
+                    handler(newVal, oldVal) {
+                        const changedField = Object.keys(newVal).find(
+                            key => newVal[key] !== oldVal?.[key]
+                        );
+
+                        if (changedField) {
+                            const sourceKey = newVal[changedField];
+
+                            if (sourceKey === 'custom') {
+                                // Add custom mapping
+                                this.currentMappings.push({
+                                    target_field: changedField,
+                                    source_key: this.customValues[changedField] || '[CUSTOM_VALUE]',
+                                    is_custom: true
+                                });
+                            } else if (sourceKey) {
+                                // Add source field mapping
+                                const sourceField = this.sourceFields.find(s => s.key === sourceKey);
+                                this.currentMappings.push({
+                                    target_field: changedField,
+                                    source_key: sourceKey,
+                                    is_custom: false
+                                });
+                            }
+
+                            emit('update:modelValue', [...this.currentMappings]);
+                        }
+                    },
+                    deep: true
+                }
+            }
+        };
+
+        // Test data
+        const app = createApp({
+            components: { FieldMappingUI },
+
+            setup() {
+                const currentMappings = ref([]);
+
+                return {
+                    currentMappings,
+                    sourceFields: [
+                        { key: 'vehicle.name', displayName: 'Vehicle Name', type: 'string' },
+                        { key: 'vehicle.model', displayName: 'Vehicle Model', type: 'string' },
+                        { key: 'vehicle.year', displayName: 'Year', type: 'number' },
+                        { key: 'price', displayName: 'Price', type: 'number' }
+                    ],
+                    targetFields: [
+                        { name: 'model_name', displayName: 'Model Name', type: 'string', required: true },
+                        { name: 'vehicle_year', displayName: 'Year', type: 'number', required: false },
+                        { name: 'price_usd', displayName: 'Price (USD)', type: 'number', required: true }
+                    ]
+                };
+            }
+        });
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

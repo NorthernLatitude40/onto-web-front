@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Select Component Test</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    .test-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #333;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f0f0f0;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="test-container">
+      <h1>Select Component Test</h1>
+
+      <h2>Test Case 1: Basic Select with v-model</h2>
+      <select v-model="basicValue" @change="logChange('Basic')">
+        <option value="">-- Select --</option>
+        <option value="option1">Option 1</option>
+        <option value="option2">Option 2</option>
+        <option value="option3">Option 3</option>
+      </select>
+      <p>Selected: {{ basicValue }}</p>
+
+      <h2>Test Case 2: Dynamic v-model binding (like FieldMappingUI)</h2>
+      <div v-for="(field, index) in fields" :key="index">
+        <label>{{ field.name }}:</label>
+        <select v-model="selectedSource[field.name]" @change="logChange(field.name)">
+          <option value="">-- Select --</option>
+          <option value="source1">Source 1</option>
+          <option value="source2">Source 2</option>
+          <option value="source3">Source 3</option>
+        </select>
+        <p>Selected: {{ selectedSource[field.name] }}</p>
+      </div>
+
+      <h2>Test Case 3: Initialize with data</h2>
+      <button @click="initializeData">Initialize Data</button>
+      <p v-if="initialized">Data initialized!</p>
+
+      <div class="result">
+        <h3>Change Log:</h3>
+        <ul>
+          <li v-for="(log, index) in changeLog" :key="index">{{ log }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref } = Vue;
+
+    createApp({
+      setup() {
+        const basicValue = ref('');
+        const selectedSource = ref({});
+        const fields = ref([
+          { name: 'field1', label: 'Field 1' },
+          { name: 'field2', label: 'Field 2' },
+          { name: 'field3', label: 'Field 3' }
+        ]);
+        const changeLog = ref([]);
+        const initialized = ref(false);
+
+        // Initialize selectedSource with all field names
+        fields.value.forEach(field => {
+          if (!(field.name in selectedSource.value)) {
+            selectedSource.value[field.name] = '';
+          }
+        });
+
+        function logChange(componentName) {
+          const timestamp = new Date().toLocaleTimeString();
+          changeLog.value.push(`${timestamp} - ${componentName}: ${selectedSource.value[componentName] || basicValue.value}`);
+        }
+
+        function initializeData() {
+          selectedSource.value.field1 = 'source2';
+          selectedSource.value.field2 = 'source3';
+          basicValue.value = 'option1';
+          initialized.value = true;
+          changeLog.value.push('Data initialized manually');
+        }
+
+        return {
+          basicValue,
+          selectedSource,
+          fields,
+          changeLog,
+          initialized,
+          logChange,
+          initializeData
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

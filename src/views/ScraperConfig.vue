@@ -276,10 +276,12 @@
 
                 <TabsContent value="parsing" class="mt-0 py-4">
                   <ParsingRulesTab
+                    :key="selectedConfigId ?? 'new'"
                     :steps="steps"
                     @update:steps="steps = $event"
                     :global-parsing-rules="globalParsingRules"
                     v-model:parsing_rules="parsing_rules"
+                    v-model:jsonpath="jsonpath"
                   />
                 </TabsContent>
 
@@ -444,6 +446,7 @@ const isCreateProjectDialogOpen = ref(false);
 
 // 从 Composable 引入狀態與方法
 const {
+  init,
   configs,
   projects,
   selectedProjectId,
@@ -487,6 +490,7 @@ const {
   showCreateConfigForm,
   deleteProject,
   deleteGroup,
+  jsonpath,
 } = useScraperConfig();
 
 // 按 group 字段分组项目
@@ -506,13 +510,11 @@ const groupedProjects = computed(() => {
 });
 
 // 处理新项目/分组创建成功
-const handleProjectCreated = (newProject: {
-  id: string | number;
-  name: string;
-}) => {
-  // 将新建立的项目推入列表
-  projects.value.push(newProject);
-  // 自动将 Selector 选中的项目切换为新建的项目
+// 3. handleProjectCreated 去重，避免和 composable 重複 push
+const handleProjectCreated = (newProject: { id: string | number; name: string }) => {
+  if (!projects.value.some((p) => String(p.id) === String(newProject.id))) {
+    projects.value.push(newProject);
+  }
   selectedProjectId.value = String(newProject.id);
 };
 
@@ -601,7 +603,7 @@ watch(selectedProjectId, () => {
 
 onMounted(() => {
   // 先確保專案列表最新
-  fetchProjects();
+   init();
 });
 </script>
 
