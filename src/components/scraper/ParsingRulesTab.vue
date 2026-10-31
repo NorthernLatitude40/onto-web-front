@@ -83,10 +83,19 @@
           <!-- 目标数据库模型 -->
           <div class="mb-4 p-3 bg-gray-50 rounded-lg">
             <Label>目标数据库模型</Label>
+
+            <div v-if="isLoadingModels" class="p-2 text-sm text-blue-600">
+              加载中...
+            </div>
+            <div v-else-if="modelLoadError" class="p-2 text-sm text-red-600">
+              {{ modelLoadError }}
+            </div>
             <select
+              v-else
               class="w-full p-2 border rounded-md bg-white"
               @change="handleDatabaseModelChange(index, state, $event)"
             >
+              <option value="" disabled selected>选择数据库模型</option>
               <option
                 v-for="model in availableDatabaseModels"
                 :key="model.id"
@@ -369,7 +378,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, watch } from "vue";
+import { reactive, computed, watch, ref, onMounted } from "vue";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import service from "@/service/request";
@@ -429,90 +438,82 @@ interface StepState {
 
 const CUSTOM_PREFIX = "custom:";
 
-const availableDatabaseModels: DatabaseModel[] = [
-  {
-    id: "used_phones",
-    name: "二手手机模型",
-    description: "用于存储二手手机信息的数据库表",
-    fields: [
-      { name: "model_name", label: "产品名称", type: "string", required: true },
-      { name: "price", label: "价格", type: "decimal", required: true },
-      {
-        name: "stock_quantity",
-        label: "库存数量",
-        type: "integer",
-        required: false,
-      },
-      {
-        name: "product_description",
-        label: "描述",
-        type: "text",
-        required: false,
-      },
-      { name: "brand_name", label: "品牌", type: "string", required: true },
-      {
-        name: "average_rating",
-        label: "评分",
-        type: "decimal",
-        required: false,
-      },
-    ],
-  },
-  {
-    id: "camping_vehicles",
-    name: "露营车租赁模型",
-    description: "用于存储露营车信息的数据库表",
-    fields: [
-      {
-        name: "vehicle_name",
-        label: "车辆名称",
-        type: "string",
-        required: true,
-      },
-      { name: "daily_rate", label: "日租金", type: "decimal", required: true },
-      {
-        name: "availability_status",
-        label: "可用状态",
-        type: "string",
-        required: false,
-      },
-      { name: "capacity", label: "容量人数", type: "integer", required: true },
-      {
-        name: "features_json",
-        label: "车辆特征",
-        type: "json",
-        required: false,
-      },
-    ],
-  },
-  {
-    id: "game_items",
-    name: "游戏道具模型",
-    description: "用于存储游戏道具信息的数据库表",
-    fields: [
-      { name: "item_name", label: "道具名称", type: "string", required: true },
-      {
-        name: "rarity_level",
-        label: "稀有度等级",
-        type: "integer",
-        required: true,
-      },
-      {
-        name: "effect_description",
-        label: "效果描述",
-        type: "text",
-        required: false,
-      },
-      { name: "drop_rate", label: "掉落率", type: "decimal", required: false },
-    ],
-  },
-];
+// Dynamic database models loading
+const availableDatabaseModels = ref<DatabaseModel[]>([]);
+const isLoadingModels = ref(false);
+const modelLoadError = ref<string | null>(null);
 
-const getTargetFields = (modelId: string) =>
-  (
-    availableDatabaseModels.find((m) => m.id === modelId) ??
-    availableDatabaseModels[0]
-  ).fields;
+// Fetch database models from backend API
+const fetchDatabaseModels = async () => {
+  isLoadingModels.value = true;
+  modelLoadError.value = null;
+
+  try {
+    // Get available table names first, then fetch columns for each
+    const tablesResponse = await service.get("/database/tables");
+    if (!tablesResponse) {
+      throw new Error("No tables data received from backend");
+    }
+
+    const tables = tablesResponse;
+    const models: DatabaseModel[] = [];
+    
+    for (const tableItem of tables) {
+      // 提取真實的表名字串（兼容物件或字串兩種可能）
+      const tableName = typeof tableItem === "object" && tableItem !== null 
+        ? (tableItem.table_name || tableItem.name || String(tableItem)) 
+        : String(tableItem);
+
+      try {
+        const columnsResponse = await service.get(
+          `/database/tables/${tableName}/columns`,
+        );
+        if (columnsResponse) {
+          const fields: TargetField[] = columnsResponse.map((col: any) => ({
+            name: col.name,
+            label: col.label || col.name,
+            type: col.type,
+            required: col.required || false,
+          }));
+
+          models.push({
+            id: tableName,
+            name: tableName
+              .replace(/_/g, " ")
+              .replace(/\b\w/g, (l) => l.toUpperCase()),
+            description: `数据库表：${tableName}`,
+            fields: fields,
+          });
+        }
+      } catch (columnError) {
+        console.error(
+          `Failed to fetch columns for table ${tableName}:`,
+          columnError,
+        );
+        // Continue with other tables even if one fails
+      }
+    }
+
+    availableDatabaseModels.value = models;
+  } catch (error) {
+    console.error("Failed to fetch database models:", error);
+    modelLoadError.value = "无法加载数据库模型，请稍后重试";
+    // Fallback to empty array instead of crashing
+    availableDatabaseModels.value = [];
+  } finally {
+    isLoadingModels.value = false;
+  }
+};
+
+// Load models when component mounts
+onMounted(() => {
+  fetchDatabaseModels();
+});
+
+const getTargetFields = (modelId: string) => {
+  const model = availableDatabaseModels.value.find((m) => m.id === modelId);
+  return model?.fields || [];
+};
 
 // ---------- 步骤状态 ----------
 const stepStates = reactive<Record<string, StepState>>({});
@@ -615,7 +616,7 @@ function resolveInitialModelId(step: any): string {
   // If we found a valid target_model, use it
   if (
     savedTargetModel &&
-    availableDatabaseModels.some((m) => m.id === savedTargetModel)
+    availableDatabaseModels.value.some((m) => m.id === savedTargetModel)
   ) {
     return savedTargetModel;
   }
@@ -630,7 +631,7 @@ function resolveInitialModelId(step: any): string {
     let bestModel: DatabaseModel | null = null;
     let highestMatchCount = 0;
 
-    for (const model of availableDatabaseModels) {
+    for (const model of availableDatabaseModels.value) {
       const modelFields = new Set(model.fields.map((f) => f.name));
       let matchCount = 0;
 
@@ -652,7 +653,10 @@ function resolveInitialModelId(step: any): string {
   }
 
   // Fallback to default model
-  return availableDatabaseModels[0].id;
+  if (availableDatabaseModels.value.length > 0) {
+    return availableDatabaseModels.value[0].id;
+  }
+  return ""; // Return empty string if no models available
 }
 
 const isCustomSource = (key?: string) => !!key && key.startsWith(CUSTOM_PREFIX);
@@ -972,10 +976,10 @@ const parseJsonResponse = (state: StepState, jsonString: string) => {
       }
 
       jsonPathKey = jsonPathKey
-        .replace(/^(\d+)\./, '[*].')          // 處理開頭的數字（例如 "0." -> "[*]."）或者改成 "" 直接去掉
-        .replace(/\[\d+\]/g, '[*]')           // 處理 [0], [1]
-        .replace(/\.\d+\./g, '[*].')          // 處理中間的 .0.
-        .replace(/\.\d+$/, '[*]');            // 處理結尾的 .0
+        .replace(/^(\d+)\./, "[*].") // 處理開頭的數字（例如 "0." -> "[*]."）或者改成 "" 直接去掉
+        .replace(/\[\d+\]/g, "[*]") // 處理 [0], [1]
+        .replace(/\.\d+\./g, "[*].") // 處理中間的 .0.
+        .replace(/\.\d+$/, "[*]"); // 處理結尾的 .0
 
       // Convert to standard JsonPath format
       const fullJsonPath = jsonPathKey.startsWith("$")
