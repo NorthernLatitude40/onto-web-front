@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type HTMLAttributes } from 'vue'
+
 
 const props = defineProps<{
   variant?: 'default' | 'secondary' | 'destructive' | 'outline'

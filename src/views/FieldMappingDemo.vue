@@ -37,7 +37,7 @@ const sampleTargetFields = [
   { name: "brand_name", label: "品牌名称", type: "string", required: false },
 ];
 
-const currentMappings = ref([]);
+const currentMappings = ref<any[]>([]);
 
 const handleMappingsUpdate = (mappings: any[]) => {
   console.log("Updated mappings:", mappings);

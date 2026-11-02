@@ -62,7 +62,7 @@ export interface Project {
     group?: string
 }
 
-const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+
 
 // 步骤 id 必须唯一：界面状态是按 id 存的，用 length+1 在删除步骤后会重复
 const genStepId = () =>
@@ -227,7 +227,7 @@ export function useScraperConfig() {
     const createProject = async (payload: { name: string; description?: string }) => {
         try {
             const res = await createVehicleProject(payload)
-            const newProject = res?.data || res || {
+            const newProject = (res as any)?.data || res || {
                 id: String(Date.now()),
                 ...payload
             }
