@@ -120,6 +120,7 @@ import { PlusIcon } from "@lucide/vue";
 interface MultiParserRule {
   id?: string;
   name: string;
+  description?: string;
   type: 'jsonpath' | 'css' | 'xpath' | 'regex';
   expression: string;
   output_field: string;

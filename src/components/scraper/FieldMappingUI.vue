@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import {
   Table,
   TableBody,
@@ -67,7 +67,7 @@ function calculateSimilarity(str1: string, str2: string): number {
   const len2 = str2.length
 
   // Create a matrix to store distances
-  const matrix = Array(len1 + 1).fill().map(() => Array(len2 + 1).fill(0))
+  const matrix = Array(len1 + 1).fill(0).map(() => Array(len2 + 1).fill(0))
 
   // Initialize the matrix
   for (let i = 0; i <= len1; i++) {

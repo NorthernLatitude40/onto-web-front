@@ -31,7 +31,7 @@ const sampleTargetFields = [
   { name: "stock_quantity", label: "库存数量", type: "integer", required: false },
 ];
 
-const currentMappings = ref([]);
+const currentMappings = ref<any[]>([]);
 
 const handleMappingsUpdate = (mappings: any[]) => {
   console.log("Updated mappings:", mappings);

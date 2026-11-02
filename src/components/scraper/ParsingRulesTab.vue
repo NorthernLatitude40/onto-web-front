@@ -550,7 +550,7 @@ const fetchDatabaseModels = async () => {
       throw new Error("No tables data received from backend");
     }
 
-    const tables = tablesResponse;
+    const tables = tablesResponse.data || [];
     const models: DatabaseModel[] = [];
 
     for (const tableItem of tables) {
@@ -566,8 +566,8 @@ const fetchDatabaseModels = async () => {
             timeout: 600000,
           },
         );
-        if (columnsResponse) {
-          const fields: TargetField[] = columnsResponse.map((col: any) => ({
+        if (columnsResponse && columnsResponse.data) {
+          const fields: TargetField[] = columnsResponse.data.map((col: any) => ({
             name: col.name,
             label: col.label || col.name,
             type: col.type,
@@ -578,7 +578,7 @@ const fetchDatabaseModels = async () => {
             id: tableName,
             name: tableName
               .replace(/_/g, " ")
-              .replace(/\b\w/g, (l) => l.toUpperCase()),
+              .replace(/\b\w/g, (letter: string) => letter.toUpperCase()),
             description: `数据库表：${tableName}`,
             fields: fields,
           });

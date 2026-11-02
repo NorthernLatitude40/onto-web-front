@@ -394,7 +394,7 @@
 <script setup lang="ts">
 import { useScraperConfig } from "@/composables/useScraperConfig";
 import { format } from "date-fns";
-import { computed, onMounted, ref, watch } from "vue";
+import { onMounted, ref, watch } from "vue";
 
 // 子组件引入
 import BasicSettingsTab from "@/components/scraper/BasicSettingsTab.vue";
@@ -461,7 +461,7 @@ const {
   steps,
   globalParsingRules,
   parsing_rules,
-  fetchProjects,
+  // fetchProjects, // Unused
   fetchConfigs,
   loadSelectedConfig,
   resetForm,
@@ -494,20 +494,20 @@ const {
 } = useScraperConfig();
 
 // 按 group 字段分组项目
-const groupedProjects = computed(() => {
-  const groups: Record<string, any[]> = {};
+// const groupedProjects = computed(() => { // Unused
+//   const groups: Record<string, any[]> = {};
+//
+//   projects.value.forEach((project) => {
+//     if (project.group) {
+//       if (!groups[project.group]) {
+//         groups[project.group] = [];
+//       }
+//       groups[project.group].push(project);
+//     }
+  //   });
 
-  projects.value.forEach((project) => {
-    if (project.group) {
-      if (!groups[project.group]) {
-        groups[project.group] = [];
-      }
-      groups[project.group].push(project);
-    }
-  });
-
-  return groups;
-});
+  //  return groups;
+// });
 
 // 处理新项目/分组创建成功
 // 3. handleProjectCreated 去重，避免和 composable 重複 push

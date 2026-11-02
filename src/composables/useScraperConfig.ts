@@ -92,9 +92,12 @@ export function useScraperConfig() {
 
     const formData = ref({
         name: '',
-        target_url: '',
-        headers: {},
+        cron_schedule: '0 0 * * *', // Default: midnight every day
+        concurrency: 5, // Default concurrency
         timeout: 30,
+        target_url: '',
+        proxy: '', // Default empty proxy
+        headers: {},
         is_active: true,
         mode: 'api',
     })
@@ -143,9 +146,12 @@ export function useScraperConfig() {
     const resetForm = () => {
         formData.value = {
             name: '',
-            target_url: '',
-            headers: {},
+            cron_schedule: '0 0 * * *', // Default: midnight every day
+            concurrency: 5, // Default concurrency
             timeout: 30,
+            target_url: '',
+            proxy: '', // Default empty proxy
+            headers: {},
             is_active: true,
             mode: 'api',
         }
@@ -263,9 +269,12 @@ export function useScraperConfig() {
 
             formData.value = {
                 name: data.name || '',
-                target_url: data.target_url || '',
-                headers: data.headers || {},
+                cron_schedule: data.cron_schedule || '0 0 * * *', // Default: midnight every day
+                concurrency: data.concurrency || 5, // Default concurrency
                 timeout: data.timeout || 30,
+                target_url: data.target_url || '',
+                proxy: data.proxy || '', // Default empty proxy
+                headers: data.headers || {},
                 is_active: data.is_active !== undefined ? data.is_active : true,
                 mode: data.mode || 'api',
             }
@@ -496,12 +505,6 @@ export function useScraperConfig() {
         }
         steps.value[stepIndex].parsing_rules.splice(ruleIndex, 1)
     }
-
-    const handleDragStart = (e: any) => { }
-    const handleDragOver = (e: any) => e.preventDefault()
-    const handleDragEnter = (e: any) => { }
-    const handleDragEnd = (e: any) => { }
-    const handleDrop = (e: any) => { }
 
     const refreshConfigs = () => {
         fetchConfigs()
