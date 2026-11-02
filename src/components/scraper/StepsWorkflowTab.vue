@@ -10,7 +10,7 @@
       <!-- Draggable Step Cards -->
       <div class="steps-container">
         <Card
-          v-for="(step, index) in steps"
+          v-for="(step, index) in props.steps"
           :key="step.id"
           class="mb-3 step-card"
           draggable="true"
@@ -179,7 +179,7 @@ interface Step {
   script?: string;
 }
 
-defineProps<{
+const props = defineProps<{
   steps: Step[];
 }>();
 
