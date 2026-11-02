@@ -53,7 +53,6 @@
                     <Button
                       variant="ghost"
                       size="sm"
-                      @click.stop.prevent="handleGroupDelete(String(groupName))"
                       title="删除分组"
                       class="text-gray-400 opacity-0 group-hover/group-item:opacity-100 transition-opacity hover:text-red-500 h-6 w-6 p-0 focus:opacity-100"
                     >

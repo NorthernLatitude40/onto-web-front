@@ -517,7 +517,7 @@ export function useScraperConfig() {
         e.dataTransfer!.effectAllowed = 'move'
     }
 
-    const handleDragEnter = (e: DragEvent, index: number) => {
+    const handleDragEnter = (e: DragEvent) => {
         e.preventDefault()
     }
 
