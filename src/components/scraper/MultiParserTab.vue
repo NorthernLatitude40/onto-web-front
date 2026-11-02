@@ -117,8 +117,22 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { PlusIcon } from "@lucide/vue";
 
+interface MultiParserRule {
+  id?: string;
+  name: string;
+  type: 'jsonpath' | 'css' | 'xpath' | 'regex';
+  expression: string;
+  output_field: string;
+}
+
+interface Step {
+  id: string;
+  name?: string;
+  multi_parser_rules?: MultiParserRule[];
+}
+
 defineProps<{
-  steps: any[];
+  steps: Step[];
 }>();
 
 defineEmits(["add-rule", "remove-rule"]);
