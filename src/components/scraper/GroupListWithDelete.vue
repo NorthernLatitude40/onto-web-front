@@ -1,5 +1,5 @@
 <template>
-  <SelectGroup v-slot="{ props }" :class="props.class">
+  <SelectGroup :class="groupClass">
     <div
       class="flex items-center justify-between p-2 hover:bg-gray-50 rounded group"
     >
@@ -25,6 +25,7 @@ import { SelectGroup, SelectLabel } from "reka-ui";
 const props = defineProps<{
   label: string;
   projectId: string | number;
+  groupClass?: string;
 }>();
 
 const emit = defineEmits<{

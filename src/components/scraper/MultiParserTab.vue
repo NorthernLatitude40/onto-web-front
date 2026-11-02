@@ -19,7 +19,7 @@
         class="step-multi-parser-container mb-6 p-4 bg-gray-50 rounded border"
       >
         <h5 class="step-parsing-title text-blue-700 font-medium mb-3">
-          步骤 {{ stepIndex + 1 }}: {{ step.name || "未命名" }}
+          步骤 {{ String(stepIndex + 1) }}: {{ step.name || "未命名" }}
         </h5>
 
         <!-- Multi-parser rules list -->

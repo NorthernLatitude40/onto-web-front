@@ -178,7 +178,7 @@ export function useScraperConfig() {
     const fetchProjects = async () => {
         try {
             const res = await getVehicleProjects()
-            const data = Array.isArray(res) ? res : (res?.data || [])
+            const data = Array.isArray(res) ? res : (res.data || [])
             if (data.length > 0) {
                 projects.value = data
                 if (!projects.value.some(p => String(p.id) === selectedProjectId.value)) {

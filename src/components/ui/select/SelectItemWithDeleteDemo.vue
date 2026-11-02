@@ -71,7 +71,7 @@ const groups = ref<ScraperGroup[]>([
 const selectedValue = ref<string>('1')
 const deletedGroup = ref<string | null>(null)
 
-const handleSelectionChange = (value: string) => {
+const handleSelectionChange = (value: string | number | bigint | Record<string, any> | null) => {
   if (value === 'create-new') {
     // Handle create new group logic
     console.log('Create new group')
