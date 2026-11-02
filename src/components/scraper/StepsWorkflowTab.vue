@@ -179,6 +179,18 @@ interface Step {
   script?: string
 }
 
+interface Step {
+  id: string;
+  name?: string;
+  mode: 'api' | 'playwright';
+  target_url?: string;
+  method?: string;
+  params_json?: string;
+  headers_json?: string;
+  wait_selector?: string;
+  script?: string;
+}
+
 defineProps<{
   steps: Step[];
 }>();

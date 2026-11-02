@@ -75,6 +75,8 @@ const handleSelectionChange = (value: string | number | bigint | Record<string, 
   if (value === 'create-new') {
     // Handle create new group logic
     console.log('Create new group')
+  } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') {
+    selectedValue.value = String(value)
   }
 }
 

@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Trash2Icon } from "@lucide/vue";
 import { SelectGroup, SelectLabel } from "reka-ui";
 
-const props = defineProps<{
+const { label, projectId, groupClass } = defineProps<{
   label: string;
   projectId: string | number;
   groupClass?: string;
@@ -33,6 +33,6 @@ const emit = defineEmits<{
 }>();
 
 const handleDelete = () => {
-  emit("delete", props.projectId);
+  emit("delete", projectId);
 };
 </script>
