@@ -489,7 +489,6 @@ const {
   importResult,
   showCreateConfigForm,
   deleteProject,
-  deleteGroup,
   jsonpath,
 } = useScraperConfig();
 
@@ -528,14 +527,6 @@ const handleProjectDelete = async (projectId: string | number) => {
   }
 };
 
-// 处理分组删除
-const handleGroupDelete = async (groupName: string) => {
-  try {
-    await deleteGroup(groupName);
-  } catch (error) {
-    console.error("删除分组失败", error);
-  }
-};
 
 // 顯示輔助函數
 const formatDate = (dateString: string) => {

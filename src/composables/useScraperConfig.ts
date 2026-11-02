@@ -506,6 +506,35 @@ export function useScraperConfig() {
         steps.value[stepIndex].parsing_rules.splice(ruleIndex, 1)
     }
 
+    // 拖放处理函数
+    const handleDragStart = (e: DragEvent, _index: number) => {
+        e.dataTransfer?.setData('text/plain', String(_index))
+        e.dataTransfer!.effectAllowed = 'move'
+    }
+
+    const handleDragOver = (e: DragEvent, _index: number) => {
+        e.preventDefault()
+        e.dataTransfer!.effectAllowed = 'move'
+    }
+
+    const handleDragEnter = (e: DragEvent, index: number) => {
+        e.preventDefault()
+    }
+
+    const handleDragEnd = () => {
+        // 结束拖放时清理
+    }
+
+    const handleDrop = (e: DragEvent, targetIndex: number) => {
+        e.preventDefault()
+        const sourceIndex = Number(e.dataTransfer?.getData('text/plain'))
+        if (!isNaN(sourceIndex) && sourceIndex !== targetIndex) {
+            // 重新排序步骤
+            const [removed] = steps.value.splice(sourceIndex, 1)
+            steps.value.splice(targetIndex, 0, removed)
+        }
+    }
+
     const refreshConfigs = () => {
         fetchConfigs()
         showSuccess('已重新整理配置列表')

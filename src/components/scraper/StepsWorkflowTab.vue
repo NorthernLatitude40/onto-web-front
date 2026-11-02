@@ -158,6 +158,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
+import type { PropType } from 'vue';
 import {
   Select,
   SelectContent,
@@ -166,22 +167,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PlusIcon, CopyIcon, Trash2Icon } from "@lucide/vue";
+import type { Step } from "@/composables/useScraperConfig";
 
-interface Step {
-  id: string;
-  name?: string;
-  mode: 'api' | 'playwright';
-  target_url?: string;
-  method?: string;
-  params_json?: string;
-  headers_json?: string;
-  wait_selector?: string;
-  script?: string;
-}
-
-const props = defineProps<{
-  steps: Step[];
-}>();
+/** @type {import('vue').PropType<Step[]>} */
+const props = defineProps({
+  steps: {
+    type: Array as PropType<Step[]>,
+    required: true,
+  },
+});
 
 defineEmits([
   "add",
