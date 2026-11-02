@@ -24,8 +24,8 @@ export interface ParsingRule {
     output_field: string
     required?: boolean
     // 字段映射 UI 写入的数据
-    mappings?: Array<{ source_key: string; target_field: string }>
-    target_model?: string
+    mappings?: Array<{ source_key: string; target_field: string; model_id?: string }>
+    target_model?: string // 每一个解析规则对应的一个目标表模型
 }
 
 export interface MultiParserRule {
@@ -47,7 +47,7 @@ export interface Step {
     headers_json: string
     wait_selector?: string
     script?: string
-    parsing_rules: ParsingRule | ParsingRule[]
+    parsing_rules: ParsingRule[] // 修改为列表形式
     multi_parser_rules: MultiParserRule[]
     delay?: number
     retry_count?: number
@@ -84,7 +84,11 @@ export function useScraperConfig() {
     const message = ref('')
     const messageType = ref<'info' | 'success' | 'error'>('info')
     const jsonpath = ref<string>('')
-    const parsing_rules = ref<ParsingRule>({ name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' })
+
+    // 修改为列表形式的默认解析规则
+    const parsing_rules = ref<ParsingRule[]>([
+        { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name', target_model: 'pricing_inventory' }
+    ])
 
     const formData = ref({
         name: '',
@@ -104,7 +108,9 @@ export function useScraperConfig() {
             method: 'GET',
             params_json: '{}',
             headers_json: '{}',
-            parsing_rules: { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' },
+            parsing_rules: [
+                { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name', target_model: 'pricing_inventory' }
+            ],
             multi_parser_rules: [],
         },
     ])
@@ -151,7 +157,9 @@ export function useScraperConfig() {
             method: 'GET',
             params_json: '{}',
             headers_json: '{}',
-            parsing_rules: { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' },
+            parsing_rules: [
+                { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name', target_model: 'pricing_inventory' }
+            ],
             multi_parser_rules: [],
         }]
         globalParsingRules.value = {
@@ -161,7 +169,9 @@ export function useScraperConfig() {
             json_schema: JSON.stringify({ type: 'object' }, null, 2),
         }
         jsonpath.value = ''
-        parsing_rules.value = { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' }
+        parsing_rules.value = [
+            { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name', target_model: 'pricing_inventory' }
+        ]
     }
 
     // 載入專案/群組列表
@@ -171,7 +181,6 @@ export function useScraperConfig() {
             const data = Array.isArray(res) ? res : (res?.data || [])
             if (data.length > 0) {
                 projects.value = data
-                // 如果目前的 selectedProjectId 不在列表中，自動選擇第一個
                 if (!projects.value.some(p => String(p.id) === selectedProjectId.value)) {
                     selectedProjectId.value = String(projects.value[0].id)
                 }
@@ -181,8 +190,6 @@ export function useScraperConfig() {
         }
     }
 
-    // 載入配置列表（傳入當前選中的 project_id）
-    // 用序号丢弃过期响应，避免快速切换项目时旧请求覆盖新结果
     let fetchConfigsSeq = 0
     const fetchConfigs = async () => {
         const seq = ++fetchConfigsSeq
@@ -209,19 +216,14 @@ export function useScraperConfig() {
         }
     }
 
-    // 初始化：页面 onMounted 调用这个，而不是只调用 fetchProjects。
-    // 原因：selectedProjectId 没变化时，页面里 watch(selectedProjectId) 不会触发，
-    // fetchConfigs 永远不会被调用，isLoading 会一直是 true。
     const init = async () => {
         const before = selectedProjectId.value
         await fetchProjects()
         if (selectedProjectId.value === before) {
             await fetchConfigs()
         }
-        // 如果项目 id 变了，页面的 watch 会负责加载
     }
 
-    // 新增：創建專案/群組接口邏輯
     const createProject = async (payload: { name: string; description?: string }) => {
         try {
             const res = await createVehicleProject(payload)
@@ -253,7 +255,6 @@ export function useScraperConfig() {
         }
         try {
             const res = await getVehicleConfigById(requestedId)
-            // 请求期间用户又切换了配置，丢弃这次结果
             if (selectedConfigId.value !== requestedId) return
 
             const data = res?.data || res
@@ -268,33 +269,43 @@ export function useScraperConfig() {
                 is_active: data.is_active !== undefined ? data.is_active : true,
                 mode: data.mode || 'api',
             }
-
             if (data.steps?.length > 0) {
-                steps.value = data.steps.map((step: any, idx: number) => ({
-                    ...step, // 保留 delay、retry_count 等未列出的字段，避免保存时丢失
-                    id: step.id || `step${idx + 1}`,
-                    name: step.name || '未命名步骤',
-                    mode: step.mode || 'api',
-                    target_url: step.target_url || '',
-                    method: step.method || 'GET',
-                    params_json: typeof step.params_json === 'string' ? step.params_json : JSON.stringify(step.params || {}),
-                    headers_json: typeof step.headers_json === 'string' ? step.headers_json : JSON.stringify(step.headers || {}),
-                    wait_selector: step.wait_selector || '',
-                    script: step.script || '',
-                    parsing_rules: step.parsing_rules || [],
-                    multi_parser_rules: step.multi_parser_rules || [],
-                }))
-                const firstRulesArray: any[] = steps.value[0]?.parsing_rules || []
+                steps.value = data.steps.map((step: any, idx: number) => {
+                    // 确保 parsing_rules 转换成数组格式
+                    let rules: ParsingRule[] = []
+                    if (Array.isArray(step.parsing_rules)) {
+                        rules = step.parsing_rules
+                    } else if (step.parsing_rules && typeof step.parsing_rules === 'object') {
+                        rules = [step.parsing_rules]
+                    } else {
+                        rules = [{ name: '默认解析规则', jsonpath: '', output_field: 'field' }]
+                    }
+
+                    return {
+                        ...step,
+                        id: step.id || `step${idx + 1}`,
+                        name: step.name || '未命名步骤',
+                        mode: step.mode || 'api',
+                        target_url: step.target_url || '',
+                        method: step.method || 'GET',
+                        params_json: typeof step.params_json === 'string' ? step.params_json : JSON.stringify(step.params || {}),
+                        headers_json: typeof step.headers_json === 'string' ? step.headers_json : JSON.stringify(step.headers || {}),
+                        wait_selector: step.wait_selector || '',
+                        script: step.script || '',
+                        parsing_rules: rules,
+                        multi_parser_rules: step.multi_parser_rules || [],
+                    }
+                })
+                const firstRulesArray: ParsingRule[] = steps.value[0]?.parsing_rules || []
                 const firstRule = firstRulesArray.length > 0 ? firstRulesArray[0] : null
                 jsonpath.value = firstRule?.jsonpath || ''
-                parsing_rules.value = firstRule || { name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name' }
+                parsing_rules.value = firstRulesArray.length > 0 ? firstRulesArray : [{ name: '默认解析规则', jsonpath: '$.vehicle.name', output_field: 'model_name', target_model: 'pricing_inventory' }]
             }
         } catch (error: any) {
             showError('加载配置详情失败: ' + (error?.message || '未知错误'))
         }
     }
 
-    // 組裝 Payload 資料結構以符合後端要求
     const buildPayload = () => {
         return {
             ...formData.value,
@@ -311,18 +322,15 @@ export function useScraperConfig() {
         }
     }
 
-    // 保存配置（支援「建立新配置」或「更新現有配置」）
     const saveConfig = async () => {
         try {
             const payload = buildPayload()
             if (creatingNewConfig.value || !selectedConfigId.value) {
                 const res = await createVehicleConfig(payload)
-                // 和其他接口一样，兼容 { data: {...} } 的包装
                 const newConfig = res?.data || res
                 showSuccess('创建配置成功')
                 creatingNewConfig.value = false
                 if (newConfig?.id) {
-                    // 先选中新配置，fetchConfigs 就不会自动选第一个
                     selectedConfigId.value = String(newConfig.id)
                 }
                 await fetchConfigs()
@@ -339,7 +347,6 @@ export function useScraperConfig() {
         }
     }
 
-    // 執行爬蟲任務
     const executeScrape = async () => {
         if (!selectedConfigId.value) {
             showError('请先选择或保存一个配置再执行爬虫')
@@ -355,7 +362,6 @@ export function useScraperConfig() {
         }
     }
 
-    // 測試連線
     const testConnection = async () => {
         if (!selectedConfigId.value) {
             showError('请先选择或保存一个配置再测试连线')
@@ -371,7 +377,6 @@ export function useScraperConfig() {
         }
     }
 
-    // 刪除配置
     const deleteConfig = async () => {
         if (!selectedConfigId.value) return
         if (!window.confirm('确定要删除这个爬虫配置吗？')) return
@@ -387,16 +392,13 @@ export function useScraperConfig() {
         }
     }
 
-    // 刪除專案/群組
     const deleteProject = async (projectId: string | number) => {
         if (!window.confirm('确定要删除这个爬虫项目/分组吗？')) return
 
         try {
             await deleteVehicleProject(projectId)
-
             projects.value = projects.value.filter(p => String(p.id) !== String(projectId))
 
-            // 如果刪除的是當前選中的專案，重置選擇
             if (String(selectedProjectId.value) === String(projectId)) {
                 selectedProjectId.value = projects.value.length > 0 ? String(projects.value[0].id) : ''
                 selectedConfigId.value = null
@@ -417,9 +419,7 @@ export function useScraperConfig() {
 
         try {
             await deleteVehicleGroup(groupName)
-
             projects.value = projects.value.filter(p => p.group !== groupName)
-
             showSuccess('删除分组成功')
         } catch (error: any) {
             const errorMsg = error?.response?.data?.message || error?.message || '未知错误'
@@ -437,7 +437,9 @@ export function useScraperConfig() {
             method: 'GET',
             params_json: '{}',
             headers_json: '{}',
-            parsing_rules: { name: '解析规则', output_field: 'field' },
+            parsing_rules: [
+                { name: '解析规则', output_field: 'field', target_model: 'pricing_inventory' }
+            ],
             multi_parser_rules: [],
         })
     }
@@ -452,7 +454,6 @@ export function useScraperConfig() {
 
     const duplicateStep = (index: number) => {
         const target = steps.value[index]
-        // 深拷贝，避免副本和原步骤共用 parsing_rules / multi_parser_rules
         const clone = JSON.parse(JSON.stringify(target))
         steps.value.splice(index + 1, 0, {
             ...clone,
@@ -472,6 +473,28 @@ export function useScraperConfig() {
             expression: '',
             output_field: ''
         })
+    }
+
+    // 新增：為某個步驟添加一條解析規則（含對應的 target_model）
+    const addParsingRuleToStep = (stepIndex: number) => {
+        if (!steps.value[stepIndex].parsing_rules) {
+            steps.value[stepIndex].parsing_rules = []
+        }
+        steps.value[stepIndex].parsing_rules.push({
+            name: `规则 ${steps.value[stepIndex].parsing_rules.length + 1}`,
+            jsonpath: '',
+            output_field: '',
+            target_model: 'pricing_inventory'
+        })
+    }
+
+    // 新增：移除某個步驟的特定解析規則
+    const removeParsingRuleFromStep = (stepIndex: number, ruleIndex: number) => {
+        if (steps.value[stepIndex].parsing_rules.length <= 1) {
+            showError('每个步骤至少需要保留一个解析规则')
+            return
+        }
+        steps.value[stepIndex].parsing_rules.splice(ruleIndex, 1)
     }
 
     const handleDragStart = (e: any) => { }
@@ -528,6 +551,7 @@ export function useScraperConfig() {
         init, fetchProjects, createProject, deleteProject, deleteGroup, fetchConfigs, loadSelectedConfig, resetForm,
         showSuccess, showError, showInfo, saveConfig, executeScrape, testConnection,
         deleteConfig, addStep, removeStep, duplicateStep, addMultiParserRule,
+        addParsingRuleToStep, removeParsingRuleFromStep, // 導出新增與刪除規則方法
         handleDragStart, handleDragOver, handleDragEnter, handleDragEnd, handleDrop,
         refreshConfigs, handleBatchImport, handleFileChange, parseAndImportConfig, showCreateConfigForm
     }

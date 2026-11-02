@@ -1,10 +1,10 @@
-import axios, { type InternalAxiosRequestConfig, type AxiosResponse, type AxiosError } from 'axios'
 import { env } from "@/config/env";
+import axios, { type AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 
 // 1. 创建 axios 实例
 const service = axios.create({
   baseURL: env.API_BASE_URL + '/api/v1',
-  timeout: 30000, // 请求超时时间：30秒（考虑到网络延迟和首次数据库查询）
+  timeout: 300000, // 请求超时时间：30秒（考虑到网络延迟和首次数据库查询）
   headers: {
     'Content-Type': 'application/json;charset=utf-8',
   },

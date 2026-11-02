@@ -1,5 +1,4 @@
-<!-- components/scraper/ParsingRulesTab.vue
-     结构：页面 → ParsingRulesTab（字段映射表已内联，不再有 FieldMappingUI 这一层）-->
+<!-- components/scraper/ParsingRulesTab.vue -->
 <template>
   <div class="form-grid py-4">
     <div class="form-group full-width mb-6">
@@ -80,9 +79,17 @@
         <div class="rule-section mb-2">
           <Label>字段映射配置 (API)</Label>
 
-          <!-- 目标数据库模型 -->
+          <!-- 目标数据库模型（支持多选） -->
           <div class="mb-4 p-3 bg-gray-50 rounded-lg">
-            <Label>目标数据库模型</Label>
+            <div class="flex justify-between items-center mb-2">
+              <Label>目标数据库模型（可多选，按住 Ctrl/Cmd 多选）</Label>
+              <span
+                v-if="state.modelIds.length > 0"
+                class="text-xs text-blue-600 font-medium"
+              >
+                已选择 {{ state.modelIds.length }} 个模型
+              </span>
+            </div>
 
             <div v-if="isLoadingModels" class="p-2 text-sm text-blue-600">
               加载中...
@@ -90,21 +97,25 @@
             <div v-else-if="modelLoadError" class="p-2 text-sm text-red-600">
               {{ modelLoadError }}
             </div>
+
             <select
               v-else
-              class="w-full p-2 border rounded-md bg-white"
+              multiple
+              class="w-full p-2 border rounded-md bg-white min-h-[120px]"
               @change="handleDatabaseModelChange(index, state, $event)"
             >
-              <option value="" disabled selected>选择数据库模型</option>
               <option
                 v-for="model in availableDatabaseModels"
                 :key="model.id"
                 :value="model.id"
-                :selected="model.id === state.modelId"
+                :selected="state.modelIds.includes(model.id)"
               >
                 {{ model.name }} ({{ model.description }})
               </option>
             </select>
+            <p class="text-xs text-gray-500 mt-1">
+              提示：按住键盘 Ctrl 键（Mac上为 Cmd 键）可进行多选操作。
+            </p>
           </div>
 
           <!-- 源数据配置 -->
@@ -185,7 +196,7 @@
             <div>
               <h3 class="text-base font-semibold">字段映射配置</h3>
               <p class="text-sm text-gray-600">
-                建立源字段与目标字段之间的映射关系
+                建立源字段与目标字段之间的映射关系（聚合所有选中模型）
               </p>
             </div>
             <div class="flex gap-2">
@@ -213,7 +224,7 @@
               <thead class="bg-gray-50">
                 <tr class="border-b border-gray-200">
                   <th class="px-4 py-3 text-left font-medium text-gray-700">
-                    目标字段
+                    目标字段 (所属模型)
                   </th>
                   <th class="px-4 py-3 text-left font-medium text-gray-700">
                     映射类型 / 源字段选择
@@ -224,12 +235,21 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-200">
+                <tr v-if="getTargetFields(state.modelIds).length === 0">
+                  <td colspan="3" class="px-4 py-6 text-center text-gray-400">
+                    请先上方选择至少一个目标数据库模型
+                  </td>
+                </tr>
                 <tr
-                  v-for="target in getTargetFields(state.modelId)"
-                  :key="`${state.modelId}-${target.name}`"
+                  v-for="target in getTargetFields(state.modelIds)"
+                  :key="`${target.modelId}-${target.name}`"
                 >
                   <td class="px-4 py-3 whitespace-nowrap">
                     <div class="flex items-center gap-2">
+                      <span
+                        class="px-1.5 py-0.5 bg-gray-100 text-xs text-gray-600 rounded font-mono"
+                        >{{ target.modelId }}</span
+                      >
                       <span class="font-medium">{{ target.label }}</span>
                       <span class="text-xs text-gray-500">{{
                         target.name
@@ -247,75 +267,150 @@
 
                   <td class="px-4 py-3 whitespace-nowrap">
                     <div class="flex gap-2 items-center">
-                      <!-- 原生 select：没有 Portal / aria-hidden / 焦点问题 -->
-                      <select
-                        class="h-9 w-[240px] rounded-md border border-gray-300 bg-white px-2 text-sm"
-                        @change="
-                          handleSourceSelect(
-                            index,
-                            step,
-                            state,
-                            target.name,
-                            $event,
-                          )
-                        "
-                      >
-                        <option
-                          value=""
-                          :selected="!selectedSource(step, target.name, state)"
+                      <!-- 带搜索框的自定义下拉选择组件 -->
+                      <div class="relative search-select-container">
+                        <div
+                          class="h-9 w-[320px] rounded-md border border-gray-300 bg-white px-3 text-sm flex items-center justify-between cursor-pointer select-none"
+                          @click="
+                            toggleDropdown(state, target.name, target.modelId)
+                          "
                         >
-                          选择源字段
-                        </option>
-                        <!-- 已保存的映射但源字段还没加载时，仍显示原来的 key -->
-                        <option
+                          <span class="truncate text-gray-700">
+                            {{
+                              getSelectedLabel(
+                                step,
+                                target.name,
+                                state,
+                                target.modelId,
+                              ) || "选择源字段"
+                            }}
+                          </span>
+                          <span class="text-gray-400 text-xs">▼</span>
+                        </div>
+
+                        <!-- 下拉浮動面板 -->
+                        <div
                           v-if="
-                            selectedSource(step, target.name, state) &&
-                            !hasSourceField(
-                              state,
-                              selectedSource(step, target.name, state),
-                            )
+                            state.activeDropdownTarget ===
+                            `${target.modelId}-${target.name}`
                           "
-                          :value="selectedSource(step, target.name, state)"
-                          selected
+                          class="absolute left-0 top-10 z-50 w-[480px] rounded-md border border-gray-200 bg-white shadow-lg p-2"
                         >
-                          {{
-                            selectedSource(step, target.name, state)
-                          }}（源字段未加载）
-                        </option>
-                        <option
-                          v-for="field in state.sourceFields"
-                          :key="field.key"
-                          :value="field.key"
-                          :selected="
-                            field.key === selectedSource(step, target.name)
-                          "
-                        >
-                          {{ field.name }} ({{ field.type }}) - {{ field.key }}
-                        </option>
-                      </select>
+                          <input
+                            type="text"
+                            v-model="state.searchKeyword"
+                            placeholder="输入关键字搜索源字段..."
+                            class="w-full h-8 px-2 mb-2 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                            @click.stop
+                          />
+                          <div class="max-h-60 overflow-y-auto space-y-1">
+                            <div
+                              class="px-2 py-1.5 text-sm rounded hover:bg-blue-50 cursor-pointer text-gray-700"
+                              @click="
+                                selectSourceField(
+                                  index,
+                                  step,
+                                  state,
+                                  target.name,
+                                  '',
+                                  target.modelId,
+                                )
+                              "
+                            >
+                              选择源字段 (清空)
+                            </div>
+                            <div
+                              v-for="field in filteredSourceFields(state)"
+                              :key="field.key"
+                              class="px-2 py-1.5 text-sm rounded hover:bg-blue-50 cursor-pointer break-all"
+                              :class="{
+                                'bg-blue-50 font-medium text-blue-600':
+                                  field.key ===
+                                  selectedSource(
+                                    step,
+                                    target.name,
+                                    state,
+                                    target.modelId,
+                                  ),
+                              }"
+                              @click="
+                                selectSourceField(
+                                  index,
+                                  step,
+                                  state,
+                                  target.name,
+                                  field.key,
+                                  target.modelId,
+                                )
+                              "
+                              :title="`${field.name} (${field.type}) - ${field.key}`"
+                            >
+                              {{ field.name }} ({{ field.type }}) -
+                              {{ field.key }}
+                            </div>
+                            <div
+                              v-if="filteredSourceFields(state).length === 0"
+                              class="px-2 py-3 text-center text-xs text-gray-400"
+                            >
+                              未找到匹配的源字段
+                            </div>
+                          </div>
+                        </div>
+                      </div>
 
                       <button
                         type="button"
                         class="btn-outline"
                         :class="{
-                          'is-active': isCustomField(step, state, target.name),
+                          'is-active': isCustomField(
+                            step,
+                            state,
+                            target.name,
+                            target.modelId,
+                          ),
                         }"
                         @click="
-                          toggleCustomValue(index, step, state, target.name)
+                          toggleCustomValue(
+                            index,
+                            step,
+                            state,
+                            target.name,
+                            target.modelId,
+                          )
                         "
                       >
                         固定值
                       </button>
 
                       <input
-                        v-if="isCustomField(step, state, target.name)"
+                        v-if="
+                          isCustomField(
+                            step,
+                            state,
+                            target.name,
+                            target.modelId,
+                          )
+                        "
                         type="text"
                         class="h-9 w-32 rounded-md border border-gray-300 px-2 text-sm"
                         placeholder="输入固定值"
-                        :value="customValueOf(step, state, target.name)"
+                        :value="
+                          customValueOf(
+                            step,
+                            state,
+                            target.name,
+                            target.modelId,
+                          )
+                        "
                         @input="onCustomInput(state, target.name, $event)"
                         @blur="
-                          commitCustomValue(index, step, state, target.name)
+                          commitCustomValue(
+                            index,
+                            step,
+                            state,
+                            target.name,
+                            target.modelId,
+                          )
                         "
                       />
                     </div>
@@ -323,7 +418,7 @@
 
                   <td class="px-4 py-3 whitespace-nowrap">
                     <span
-                      v-if="findMapping(step, target.name)"
+                      v-if="findMapping(step, target.name, target.modelId)"
                       class="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800"
                       >已映射</span
                     >
@@ -361,7 +456,7 @@
         <div class="rule-section mb-2 mt-4">
           <Label>CSS Selector</Label>
           <Textarea
-            :model-value="rulesOf(step).css_selector ?? ''"
+            :model-value="rulesList(step)[0]?.css_selector ?? ''"
             @update:model-value="
               (val) =>
                 updateStepParsingRules(index, {
@@ -378,7 +473,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, watch, ref, onMounted } from "vue";
+import { reactive, computed, watch, ref, onMounted, onUnmounted } from "vue";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import service from "@/service/request";
@@ -421,52 +516,55 @@ interface SourceField {
 interface Mapping {
   source_key: string;
   target_field: string;
+  model_id?: string;
 }
 
-// 每个步骤独立的界面状态。
-// 映射本身不在这里存：唯一数据源就是 step.parsing_rules.mappings。
 interface StepState {
-  modelId: string;
+  modelIds: string[];
   sourceFields: SourceField[];
   manualJson: string;
   isUsingManualJson: boolean;
   loading: boolean;
-  customMode: Record<string, boolean>; // 目标字段 -> 是否处于“固定值”模式
-  customDraft: Record<string, string>; // 目标字段 -> 固定值输入框草稿
-  keyMapping?: Record<string, string>; // oldKey -> newKey mapping for backward compatibility
+  customMode: Record<string, boolean>;
+  customDraft: Record<string, string>;
+  keyMapping?: Record<string, string>;
+  activeDropdownTarget: string | null;
+  searchKeyword: string;
 }
 
 const CUSTOM_PREFIX = "custom:";
 
-// Dynamic database models loading
 const availableDatabaseModels = ref<DatabaseModel[]>([]);
 const isLoadingModels = ref(false);
 const modelLoadError = ref<string | null>(null);
 
-// Fetch database models from backend API
 const fetchDatabaseModels = async () => {
   isLoadingModels.value = true;
   modelLoadError.value = null;
 
   try {
-    // Get available table names first, then fetch columns for each
-    const tablesResponse = await service.get("/database/tables");
+    const tablesResponse = await service.get("/database/tables", {
+      timeout: 300000,
+    });
     if (!tablesResponse) {
       throw new Error("No tables data received from backend");
     }
 
     const tables = tablesResponse;
     const models: DatabaseModel[] = [];
-    
+
     for (const tableItem of tables) {
-      // 提取真實的表名字串（兼容物件或字串兩種可能）
-      const tableName = typeof tableItem === "object" && tableItem !== null 
-        ? (tableItem.table_name || tableItem.name || String(tableItem)) 
-        : String(tableItem);
+      const tableName =
+        typeof tableItem === "object" && tableItem !== null
+          ? tableItem.table_name || tableItem.name || String(tableItem)
+          : String(tableItem);
 
       try {
         const columnsResponse = await service.get(
           `/database/tables/${tableName}/columns`,
+          {
+            timeout: 600000,
+          },
         );
         if (columnsResponse) {
           const fields: TargetField[] = columnsResponse.map((col: any) => ({
@@ -490,7 +588,6 @@ const fetchDatabaseModels = async () => {
           `Failed to fetch columns for table ${tableName}:`,
           columnError,
         );
-        // Continue with other tables even if one fails
       }
     }
 
@@ -498,49 +595,122 @@ const fetchDatabaseModels = async () => {
   } catch (error) {
     console.error("Failed to fetch database models:", error);
     modelLoadError.value = "无法加载数据库模型，请稍后重试";
-    // Fallback to empty array instead of crashing
     availableDatabaseModels.value = [];
   } finally {
     isLoadingModels.value = false;
   }
 };
 
-// Load models when component mounts
 onMounted(() => {
   fetchDatabaseModels();
+  document.addEventListener("click", handleClickOutside);
 });
 
-const getTargetFields = (modelId: string) => {
-  const model = availableDatabaseModels.value.find((m) => m.id === modelId);
-  return model?.fields || [];
+onUnmounted(() => {
+  document.removeEventListener("click", handleClickOutside);
+});
+
+const handleClickOutside = (event: MouseEvent) => {
+  if (!(event.target as HTMLElement).closest(".search-select-container")) {
+    Object.values(stepStates).forEach((state) => {
+      state.activeDropdownTarget = null;
+    });
+  }
 };
 
-// ---------- 步骤状态 ----------
+const toggleDropdown = (
+  state: StepState,
+  targetName: string,
+  modelId: string,
+) => {
+  const dropdownKey = `${modelId}-${targetName}`;
+  if (state.activeDropdownTarget === dropdownKey) {
+    state.activeDropdownTarget = null;
+  } else {
+    state.activeDropdownTarget = dropdownKey;
+    state.searchKeyword = ""; // 💡 確保每次打開時搜尋關鍵字為空
+  }
+};
+
+const filteredSourceFields = (state: StepState) => {
+  if (!state.searchKeyword.trim()) return state.sourceFields;
+  const kw = state.searchKeyword.toLowerCase();
+  return state.sourceFields.filter(
+    (f) =>
+      f.name.toLowerCase().includes(kw) ||
+      f.key.toLowerCase().includes(kw) ||
+      f.type.toLowerCase().includes(kw),
+  );
+};
+
+const getSelectedLabel = (
+  step: any,
+  target: string,
+  state: StepState,
+  modelId?: string,
+) => {
+  const key = selectedSource(step, target, state, modelId);
+  if (!key) return "";
+  const found = state.sourceFields.find((f) => f.key === key);
+  if (found) {
+    return `${found.name} (${found.type}) - ${found.key}`;
+  }
+  return key;
+};
+
+const selectSourceField = (
+  index: number,
+  step: any,
+  state: StepState,
+  target: string,
+  value: string,
+  modelId?: string,
+) => {
+  state.customMode[target] = false;
+  delete state.customDraft[target];
+  state.activeDropdownTarget = null;
+  state.searchKeyword = ""; // 💡 選擇後清空搜尋
+  updateStepMappings(index, step, target, value, modelId);
+};
+
+const getTargetFields = (modelIds: string[]) => {
+  if (!modelIds || modelIds.length === 0) return [];
+
+  const allFields: Array<TargetField & { modelId: string }> = [];
+  for (const modelId of modelIds) {
+    const model = availableDatabaseModels.value.find((m) => m.id === modelId);
+    if (model && model.fields) {
+      allFields.push(
+        ...model.fields.map((field) => ({
+          ...field,
+          modelId,
+        })),
+      );
+    }
+  }
+
+  return allFields;
+};
+
 const stepStates = reactive<Record<string, StepState>>({});
 
 const stepKey = (step: any, index: number) =>
   String(step?.id ?? `idx-${index}`);
 
-// parsing_rules 类型允许是数组，这里统一当对象处理
-const rulesOf = (step: any): Record<string, any> => {
-  if (!step?.parsing_rules || typeof step.parsing_rules !== "object") {
-    return {};
-  }
-  // 如果是数组且有元素，返回第一个元素；如果是单对象，直接返回
+const rulesList = (step: any): Array<Record<string, any>> => {
+  if (!step?.parsing_rules) return [];
   if (Array.isArray(step.parsing_rules)) {
-    return step.parsing_rules.length > 0 ? step.parsing_rules[0] : {};
+    return step.parsing_rules;
   }
-  return step.parsing_rules;
+  return [step.parsing_rules];
 };
-
-// Function definitions will be moved here to avoid circular dependency
 
 function ensureStepStates() {
   props.steps.forEach((step, index) => {
     const key = stepKey(step, index);
     if (!stepStates[key]) {
       stepStates[key] = {
-        modelId: resolveInitialModelId(step),
+        modelIds: resolveInitialModelIds(step),
         sourceFields: [],
         manualJson: "",
         isUsingManualJson: false,
@@ -548,6 +718,8 @@ function ensureStepStates() {
         customMode: {},
         customDraft: {},
         keyMapping: {},
+        activeDropdownTarget: null,
+        searchKeyword: "",
       };
     }
   });
@@ -565,117 +737,149 @@ const stepViews = computed(() =>
     .filter((view) => !!view.state),
 );
 
-// ---------- 写回 steps（一次事件只调用一次，把改动合并成一个 patch） ----------
-const updateStepParsingRules = (index: number, patch: Record<string, any>) => {
+const updateStepMappings = (
+  index: number,
+  step: any,
+  target: string,
+  sourceKey: string,
+  modelId?: string,
+) => {
   const newSteps = [...props.steps];
+  const rules = [...rulesList(step)];
+
+  let targetRuleIndex = rules.findIndex((r) => r.target_model === modelId);
+  if (targetRuleIndex === -1 && rules.length > 0) {
+    targetRuleIndex = 0;
+  }
+
+  if (targetRuleIndex >= 0) {
+    const currentMappings = Array.isArray(rules[targetRuleIndex].mappings)
+      ? [...rules[targetRuleIndex].mappings]
+      : [];
+    const filteredMappings = currentMappings.filter(
+      (m) => m.target_field !== target,
+    );
+
+    if (sourceKey) {
+      filteredMappings.push({
+        source_key: sourceKey,
+        target_field: target,
+        model_id: modelId,
+      });
+    }
+
+    rules[targetRuleIndex] = {
+      ...rules[targetRuleIndex],
+      target_model: modelId || rules[targetRuleIndex].target_model,
+      mappings: filteredMappings,
+    };
+  }
+
   newSteps[index] = {
-    ...newSteps[index],
-    parsing_rules: {
-      ...rulesOf(newSteps[index]),
-      ...patch, // 新值放后面，才能覆盖旧值
-    },
+    ...step,
+    parsing_rules: rules,
   };
   emit("update:steps", newSteps);
 };
 
-// ---------- 映射读取 ----------
-// Function definitions in correct order to avoid circular dependency
+const updateStepParsingRules = (index: number, patch: Record<string, any>) => {
+  const newSteps = [...props.steps];
+  const step = newSteps[index];
+  const currentRules = [...rulesList(step)];
+
+  if (currentRules.length === 0) {
+    currentRules.push({
+      name: "默认解析规则",
+      jsonpath: "$.vehicle.name",
+      output_field: "model_name",
+      target_model: step.target_model || "pricing_inventory",
+      ...patch,
+    });
+  } else {
+    currentRules[0] = {
+      ...currentRules[0],
+      ...patch,
+    };
+  }
+
+  newSteps[index] = {
+    ...step,
+    parsing_rules: currentRules,
+  };
+  emit("update:steps", newSteps);
+};
 
 function getMappings(step: any): Mapping[] {
-  const m = rulesOf(step).mappings;
-  return Array.isArray(m) ? m : [];
-}
-
-function findMapping(step: any, target: string) {
-  return getMappings(step).find((m) => m.target_field === target);
-}
-
-function resolveInitialModelId(step: any): string {
-  // First check if target_model is stored at step level
-  let savedTargetModel = step.target_model;
-
-  // If not found at step level, try to get it from parsing rules if it exists
-  if (!savedTargetModel) {
-    const rules = rulesOf(step);
-
-    // Handle both single object and array cases for parsing_rules
-    if (Array.isArray(rules)) {
-      // Look through all rules to find a target_model field
-      for (const rule of rules) {
-        if ("target_model" in rule && rule.target_model) {
-          savedTargetModel = rule.target_model;
-          break;
-        }
-      }
-    } else if (rules && "target_model" in rules) {
-      // Single object case
-      savedTargetModel = rules.target_model;
+  const rules = rulesList(step);
+  const allMappings: Mapping[] = [];
+  rules.forEach((rule) => {
+    if (Array.isArray(rule.mappings)) {
+      allMappings.push(...rule.mappings);
     }
-  }
+  });
+  return allMappings;
+}
 
-  // If we found a valid target_model, use it
-  if (
-    savedTargetModel &&
-    availableDatabaseModels.value.some((m) => m.id === savedTargetModel)
-  ) {
-    return savedTargetModel;
-  }
-
-  // Try to infer from existing mappings - look for target_field values that match known model fields
+function findMapping(step: any, target: string, modelId?: string) {
   const mappings = getMappings(step);
-  if (mappings.length > 0) {
-    // Collect all target_field names from mappings
-    const mappedFields = new Set(mappings.map((m) => m.target_field));
+  if (modelId) {
+    return mappings.find(
+      (m) => m.target_field === target && m.model_id === modelId,
+    );
+  }
+  return mappings.find((m) => m.target_field === target);
+}
 
-    // Check which database models have the most matching fields
-    let bestModel: DatabaseModel | null = null;
-    let highestMatchCount = 0;
+function resolveInitialModelIds(step: any): string[] {
+  const modelIds: string[] = [];
 
-    for (const model of availableDatabaseModels.value) {
-      const modelFields = new Set(model.fields.map((f) => f.name));
-      let matchCount = 0;
-
-      mappedFields.forEach((field) => {
-        if (modelFields.has(field)) matchCount++;
-      });
-
-      if (matchCount > highestMatchCount) {
-        highestMatchCount = matchCount;
-        bestModel = model;
-      }
-    }
-
-    // If we found a good match, use it
-    if (bestModel && highestMatchCount >= 2) {
-      // At least 2 matching fields
-      return bestModel.id;
-    }
+  if (Array.isArray(step.target_models)) {
+    modelIds.push(...step.target_models);
+  } else if (step.target_model) {
+    modelIds.push(step.target_model);
   }
 
-  // Fallback to default model
-  if (availableDatabaseModels.value.length > 0) {
-    return availableDatabaseModels.value[0].id;
-  }
-  return ""; // Return empty string if no models available
+  const rules = rulesList(step);
+  rules.forEach((rule) => {
+    if (rule.target_model && !modelIds.includes(rule.target_model)) {
+      modelIds.push(rule.target_model);
+    }
+  });
+
+  const mappings = getMappings(step);
+  mappings.forEach((m) => {
+    if (m.model_id && !modelIds.includes(m.model_id)) {
+      modelIds.push(m.model_id);
+    }
+  });
+
+  return modelIds;
 }
 
 const isCustomSource = (key?: string) => !!key && key.startsWith(CUSTOM_PREFIX);
-
-// 格式：custom:<目标字段>:<值>，值里可能含冒号
 const parseCustomValue = (key: string) => key.split(":").slice(2).join(":");
 
-const isCustomField = (step: any, state: StepState, target: string) => {
+const isCustomField = (
+  step: any,
+  state: StepState,
+  target: string,
+  modelId?: string,
+) => {
   const flag = state.customMode[target];
   return flag !== undefined
     ? flag
-    : isCustomSource(findMapping(step, target)?.source_key);
+    : isCustomSource(findMapping(step, target, modelId)?.source_key);
 };
 
-const selectedSource = (step: any, target: string, state?: StepState) => {
-  const mappingKey = findMapping(step, target)?.source_key;
+const selectedSource = (
+  step: any,
+  target: string,
+  state?: StepState,
+  modelId?: string,
+) => {
+  const mappingKey = findMapping(step, target, modelId)?.source_key;
   if (!mappingKey || isCustomSource(mappingKey)) return "";
 
-  // If we have a key mapping (from parseJsonResponse), use it to translate old keys to new keys
   if (state && state.keyMapping && state.keyMapping[mappingKey]) {
     return state.keyMapping[mappingKey];
   }
@@ -683,62 +887,37 @@ const selectedSource = (step: any, target: string, state?: StepState) => {
   return mappingKey;
 };
 
-const customValueOf = (step: any, state: StepState, target: string) => {
-  if (target in state.customDraft) return state.customDraft[target];
-  const key = findMapping(step, target)?.source_key;
-  return isCustomSource(key) ? parseCustomValue(key as string) : "";
-};
-
-const hasSourceField = (state: StepState, key: string) =>
-  state.sourceFields.some((f) => f.key === key);
-
-const unmappedRequiredCount = (step: any, state: StepState) =>
-  getTargetFields(state.modelId).filter(
-    (t) => t.required && !findMapping(step, t.name),
-  ).length;
-
-// 返回替换/删除某个目标字段映射后的新数组
-const withMapping = (
-  step: any,
-  target: string,
-  sourceKey: string,
-): Mapping[] => {
-  const rest = getMappings(step).filter((m) => m.target_field !== target);
-  return sourceKey
-    ? [...rest, { source_key: sourceKey, target_field: target }]
-    : rest;
-};
-
-// ---------- 映射操作 ----------
-const handleSourceSelect = (
-  index: number,
+const customValueOf = (
   step: any,
   state: StepState,
   target: string,
-  event: Event,
+  modelId?: string,
 ) => {
-  const value = (event.target as HTMLSelectElement).value;
-  state.customMode[target] = false;
-  delete state.customDraft[target];
-  updateStepParsingRules(index, { mappings: withMapping(step, target, value) });
+  if (target in state.customDraft) return state.customDraft[target];
+  const key = findMapping(step, target, modelId)?.source_key;
+  return isCustomSource(key) ? parseCustomValue(key as string) : "";
 };
+
+const unmappedRequiredCount = (step: any, state: StepState) =>
+  getTargetFields(state.modelIds).filter(
+    (t) => t.required && !findMapping(step, t.name, t.modelId),
+  ).length;
 
 const toggleCustomValue = (
   index: number,
   step: any,
   state: StepState,
   target: string,
+  modelId?: string,
 ) => {
-  if (isCustomField(step, state, target)) {
-    // 退出固定值模式
+  if (isCustomField(step, state, target, modelId)) {
     state.customMode[target] = false;
     delete state.customDraft[target];
   } else {
-    // 进入固定值模式：清掉原映射，输入完成后再写入
     state.customMode[target] = true;
     state.customDraft[target] = "";
   }
-  updateStepParsingRules(index, { mappings: withMapping(step, target, "") });
+  updateStepMappings(index, step, target, "", modelId);
 };
 
 const onCustomInput = (state: StepState, target: string, event: Event) => {
@@ -750,20 +929,24 @@ const commitCustomValue = (
   step: any,
   state: StepState,
   target: string,
+  modelId?: string,
 ) => {
-  if (!isCustomField(step, state, target)) return;
+  if (!isCustomField(step, state, target, modelId)) return;
   const draft = state.customDraft[target];
-  if (draft === undefined) return; // 没输入过，不改动
+  if (draft === undefined) return;
   const sourceKey = draft ? `${CUSTOM_PREFIX}${target}:${draft}` : "";
-  updateStepParsingRules(index, {
-    mappings: withMapping(step, target, sourceKey),
-  });
+  updateStepMappings(index, step, target, sourceKey, modelId);
 };
 
 const resetMappings = (index: number, state: StepState) => {
   state.customMode = {};
   state.customDraft = {};
-  updateStepParsingRules(index, { mappings: [] });
+
+  const newSteps = [...props.steps];
+  const step = newSteps[index];
+  const rules = rulesList(step).map((rule) => ({ ...rule, mappings: [] }));
+  newSteps[index] = { ...step, parsing_rules: rules };
+  emit("update:steps", newSteps);
 };
 
 const handleDatabaseModelChange = (
@@ -771,24 +954,55 @@ const handleDatabaseModelChange = (
   state: StepState,
   event: Event,
 ) => {
-  const modelId = (event.target as HTMLSelectElement).value;
-  if (state.modelId === modelId) return;
-  state.modelId = modelId;
+  const selectElement = event.target as HTMLSelectElement;
+  const selectedOptions = Array.from(selectElement.selectedOptions).map(
+    (option) => option.value,
+  );
+
+  state.modelIds = selectedOptions;
   state.customMode = {};
   state.customDraft = {};
-  // 旧映射的 target_field 在新模型里可能不存在，直接清空
-  updateStepParsingRules(index, { mappings: [] });
 
-  // Store target_model separately at step level (not in parsing_rules)
+  const step = props.steps[index];
+  const existingRules = rulesList(step);
+
+  const newParsingRules = selectedOptions.map((modelId, idx) => {
+    const matchedRule =
+      existingRules.find((r) => r.target_model === modelId) ||
+      existingRules[idx];
+    const modelMappings = getMappings(step).filter(
+      (m) => m.model_id === modelId,
+    );
+
+    return {
+      name: matchedRule?.name || `解析规则_${modelId}`,
+      jsonpath: matchedRule?.jsonpath || "$.vehicle.name",
+      output_field: matchedRule?.output_field || "model_name",
+      target_model: modelId,
+      mappings:
+        modelMappings.length > 0 ? modelMappings : matchedRule?.mappings || [],
+    };
+  });
+
   const newSteps = [...props.steps];
   newSteps[index] = {
     ...newSteps[index],
-    target_model: modelId,
+    target_models: selectedOptions,
+    target_model: selectedOptions.length > 0 ? selectedOptions[0] : null,
+    parsing_rules:
+      newParsingRules.length > 0
+        ? newParsingRules
+        : [
+            {
+              name: "默认解析规则",
+              target_model: selectedOptions[0],
+              mappings: [],
+            },
+          ],
   };
   emit("update:steps", newSteps);
 };
 
-// ---------- 自动配对 ----------
 const tokenize = (str: string): string[] =>
   str
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
@@ -850,33 +1064,49 @@ const calculateSimilarityScore = (targetName: string, sourceKey: string) => {
 };
 
 const autoMapFields = (index: number, step: any, state: StepState) => {
-  const next = [...getMappings(step)];
-  const mapped = new Set(next.map((m) => m.target_field));
+  const rules = [...rulesList(step)];
 
-  for (const target of getTargetFields(state.modelId)) {
-    if (mapped.has(target.name)) continue;
+  rules.forEach((rule) => {
+    const modelId = rule.target_model;
+    const modelTargetFields = getTargetFields(state.modelIds).filter(
+      (t) => !modelId || t.modelId === modelId,
+    );
+    const nextMappings = Array.isArray(rule.mappings) ? [...rule.mappings] : [];
 
-    let best: SourceField | undefined;
-    let highest = 0;
-    for (const field of state.sourceFields) {
-      const score = calculateSimilarityScore(target.name, field.key);
-      if (score > highest) {
-        highest = score;
-        best = field;
+    for (const target of modelTargetFields) {
+      const existing = nextMappings.find(
+        (m) => m.target_field === target.name && m.model_id === target.modelId,
+      );
+      if (existing) continue;
+
+      let best: SourceField | undefined;
+      let highest = 0;
+      for (const field of state.sourceFields) {
+        const score = calculateSimilarityScore(target.name, field.key);
+        if (score > highest) {
+          highest = score;
+          best = field;
+        }
+      }
+
+      if (best && highest > 0.5) {
+        nextMappings.push({
+          source_key: best.key,
+          target_field: target.name,
+          model_id: target.modelId,
+        });
+        state.customMode[target.name] = false;
+        delete state.customDraft[target.name];
       }
     }
+    rule.mappings = nextMappings;
+  });
 
-    if (best && highest > 0.5) {
-      next.push({ source_key: best.key, target_field: target.name });
-      state.customMode[target.name] = false;
-      delete state.customDraft[target.name];
-    }
-  }
-
-  updateStepParsingRules(index, { mappings: next });
+  const newSteps = [...props.steps];
+  newSteps[index] = { ...step, parsing_rules: rules };
+  emit("update:steps", newSteps);
 };
 
-// ---------- 获取 / 解析源数据 ----------
 const parseJsonConfig = (value: any, label: string): Record<string, any> => {
   if (!value) return {};
   if (typeof value === "object") return value;
@@ -949,62 +1179,38 @@ const fetchDataFromStep1 = async (state: StepState) => {
 };
 
 const parseJsonResponse = (state: StepState, jsonString: string) => {
-  debugger;
   try {
     const parsedData = JSON.parse(jsonString);
     const flattened = flattenJson(parsedData, "");
 
-    // Convert to standard JsonPath format and deduplicate
     const sourceFieldsMap = new Map<string, SourceField>();
-    const keyMapping = new Map<string, string>(); // oldKey -> newKey
+    const keyMapping = new Map<string, string>();
 
     Object.keys(flattened).forEach((key) => {
-      let jsonPathKey = key;
+      let jsonPathKey = key.replace(/^\d+\.\s*/, "");
 
-      // Remove all array indices completely, not just convert to [*]
-      jsonPathKey = jsonPathKey.replace(/\[\d+\]/g, "");
-
-      // Convert [*] to empty string for final path
-      jsonPathKey = jsonPathKey.replace(/\[\*\]/g, "");
-
-      // Clean up multiple dots and trailing dots
-      jsonPathKey = jsonPathKey.replace(/\.{2,}/g, ".").replace(/\.+$/, "");
-
-      // Remove leading dot if present
       if (jsonPathKey.startsWith(".")) {
         jsonPathKey = jsonPathKey.substring(1);
       }
 
-      jsonPathKey = jsonPathKey
-        .replace(/^(\d+)\./, "[*].") // 處理開頭的數字（例如 "0." -> "[*]."）或者改成 "" 直接去掉
-        .replace(/\[\d+\]/g, "[*]") // 處理 [0], [1]
-        .replace(/\.\d+\./g, "[*].") // 處理中間的 .0.
-        .replace(/\.\d+$/, "[*]"); // 處理結尾的 .0
-
-      // Convert to standard JsonPath format
       const fullJsonPath = jsonPathKey.startsWith("$")
         ? jsonPathKey
         : `$.${jsonPathKey}`;
 
-      // Create a deduplication key based on field name and type
       const fieldName = key.split(".").pop() || key;
-      const dedupKey = `${fieldName} (${typeof flattened[key]})`;
 
-      // Deduplicate - keep only the first occurrence of each unique field name/type combination
-      if (!sourceFieldsMap.has(dedupKey)) {
-        sourceFieldsMap.set(dedupKey, {
+      if (!sourceFieldsMap.has(fullJsonPath)) {
+        sourceFieldsMap.set(fullJsonPath, {
           name: fieldName,
           key: fullJsonPath,
           type: typeof flattened[key],
           sample: String(flattened[key]),
         });
-        // Store the mapping from old key to new key
         keyMapping.set(key, fullJsonPath);
       }
     });
-
     state.sourceFields = Array.from(sourceFieldsMap.values());
-    state.keyMapping = Object.fromEntries(keyMapping); // Store for later use in selectedSource
+    state.keyMapping = Object.fromEntries(keyMapping);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("Failed to parse JSON response:", error);
@@ -1027,7 +1233,7 @@ const flattenJson = (obj: any, prefix: string = ""): Record<string, any> => {
       if (value.length > 0) {
         const arrayItem = value[0];
         if (typeof arrayItem === "object" && arrayItem !== null) {
-          Object.assign(result, flattenJson(arrayItem, `${newKey}[*]`));
+          Object.assign(result, flattenJson(arrayItem, newKey));
         } else {
           result[newKey] = `[${Array(value.length).fill("item").join(", ")}]`;
         }
@@ -1053,6 +1259,34 @@ const handleManualJsonInput = (state: StepState) => {
 </script>
 
 <style scoped>
+/* 針對該搜尋輸入框強制設定背景與字體顏色，避免黑底黑字 */
+input[type="text"] {
+  background-color: #ffffff !important;
+  color: #1f2937 !important; /* 深灰色字體 */
+}
+
+/* 覆蓋瀏覽器 autofill（自動填入）時的樣式 */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #1f2937 !important;
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.btn-outline {
+  padding: 4px 12px;
+  font-size: 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  white-space: nowrap;
+}
+.btn-outline:hover,
+.btn-outline.is-active {
+  background: #f3f4f6;
+}
+
 .btn-outline {
   padding: 4px 12px;
   font-size: 13px;
