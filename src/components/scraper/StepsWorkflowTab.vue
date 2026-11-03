@@ -113,7 +113,7 @@
             </template>
 
             <!-- Playwright Mode Fields -->
-            <template v-else-if="step.mode === 'playwright'">
+            <template v-if="step.mode === 'playwright'">
               <div class="form-group full-width mb-3">
                 <Label>页面 URL</Label>
                 <Input
@@ -183,6 +183,6 @@ defineEmits([
   "drop",
 ]);
 
-// 若 Step 型別尚未包含 mode / target_url 等欄位，這裡用 any[] 讓模板能直接存取
+// 用 any[] 让模板可以直接访问 mode / target_url 等字段，不依赖 Step 类型是否完整
 const stepList = computed(() => props.steps as any[]);
 </script>

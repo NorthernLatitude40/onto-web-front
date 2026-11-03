@@ -38,13 +38,13 @@ export interface MultiParserRule {
 }
 
 export interface Step {
-    id: string | number;
-    name?: string;
+    id: string
+    name: string
     mode: 'api' | 'playwright'
-    target_url?: string;
-    method?: "GET" | "POST" | "PUT" | "DELETE";
-    params_json?: string;
-    headers_json?: string;
+    target_url: string
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE'
+    params_json: string
+    headers_json: string
     wait_selector?: string
     script?: string
     parsing_rules: ParsingRule[] // 修改为列表形式
@@ -292,7 +292,7 @@ export function useScraperConfig() {
 
                     return {
                         ...step,
-                        id: step.id || `step${idx + 1}`,
+                        id: String(step.id || `step${idx + 1}`),
                         name: step.name || '未命名步骤',
                         mode: step.mode || 'api',
                         target_url: step.target_url || '',
@@ -322,10 +322,10 @@ export function useScraperConfig() {
             steps: steps.value.map(step => ({
                 ...step,
                 params: (() => {
-                    try { return JSON.parse(step.params_json) } catch { return {} }
+                    try { return JSON.parse(step.params_json ?? '{}') } catch { return {} }
                 })(),
                 headers: (() => {
-                    try { return JSON.parse(step.headers_json) } catch { return {} }
+                    try { return JSON.parse(step.headers_json ?? '{}') } catch { return {} }
                 })()
             }))
         }
