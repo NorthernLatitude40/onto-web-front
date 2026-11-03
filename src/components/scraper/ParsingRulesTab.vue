@@ -95,24 +95,48 @@
               加载中...
             </div>
             <div v-else-if="modelLoadError" class="p-2 text-sm text-red-600">
-              {{ modelLoadError }}
+              <span>{{ modelLoadError }}</span>
+              <button
+                type="button"
+                class="btn-outline ml-2"
+                @click="fetchDatabaseModels"
+              >
+                重试
+              </button>
             </div>
 
-            <select
-              v-else
-              multiple
-              class="w-full p-2 border rounded-md bg-white min-h-[120px]"
-              @change="handleDatabaseModelChange(index, state, $event)"
-            >
-              <option
-                v-for="model in availableDatabaseModels"
-                :key="model.id"
-                :value="model.id"
-                :selected="state.modelIds.includes(model.id)"
+            <template v-else>
+              <!-- 模型列表为空时给出明确提示，而不是一个空白框 -->
+              <div
+                v-if="availableDatabaseModels.length === 0"
+                class="mb-2 p-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded"
               >
-                {{ model.name }} ({{ model.description }})
-              </option>
-            </select>
+                没有读取到任何数据库模型（/database/tables 返回为空）。
+                <button
+                  type="button"
+                  class="btn-outline ml-2"
+                  @click="fetchDatabaseModels"
+                >
+                  重新加载
+                </button>
+              </div>
+
+              <select
+                multiple
+                class="model-select w-full p-2 border rounded-md bg-white text-gray-900 min-h-[120px]"
+                @change="handleDatabaseModelChange(index, state, $event)"
+              >
+                <option
+                  v-for="model in modelOptionsFor(state)"
+                  :key="model.id"
+                  :value="model.id"
+                  :selected="state.modelIds.includes(model.id)"
+                >
+                  {{ model.name }} ({{ model.description }})
+                </option>
+              </select>
+            </template>
+
             <p class="text-xs text-gray-500 mt-1">
               提示：按住键盘 Ctrl 键（Mac上为 Cmd 键）可进行多选操作。
             </p>
@@ -237,7 +261,18 @@
               <tbody class="divide-y divide-gray-200">
                 <tr v-if="getTargetFields(state.modelIds).length === 0">
                   <td colspan="3" class="px-4 py-6 text-center text-gray-400">
-                    请先上方选择至少一个目标数据库模型
+                    <template v-if="state.modelIds.length === 0">
+                      请先上方选择至少一个目标数据库模型
+                    </template>
+                    <template v-else-if="isLoadingModels">
+                      正在加载模型字段...
+                    </template>
+                    <template v-else>
+                      已选择的模型（{{
+                        state.modelIds.join("、")
+                      }}）没有在模型列表中找到，
+                      请检查表名是否一致或重新加载模型列表
+                    </template>
                   </td>
                 </tr>
                 <tr
@@ -538,6 +573,45 @@ const availableDatabaseModels = ref<DatabaseModel[]>([]);
 const isLoadingModels = ref(false);
 const modelLoadError = ref<string | null>(null);
 
+/**
+ * 兼容不同的响应结构：
+ *  - 响应拦截器已解包：      [ ... ]
+ *  - axios 原始响应：        { data: [ ... ] }
+ *  - 后端包了一层：          { data: { items: [ ... ] } } / { data: { tables: [ ... ] } }
+ *                           { items: [...] } / { tables: [...] } / { columns: [...] } / { results: [...] }
+ */
+const extractList = (res: any): any[] => {
+  const seen = new Set<any>();
+  const walk = (node: any, depth: number): any[] | null => {
+    if (Array.isArray(node)) return node;
+    if (!node || typeof node !== "object" || depth > 3 || seen.has(node)) {
+      return null;
+    }
+    seen.add(node);
+    for (const key of [
+      "data",
+      "items",
+      "tables",
+      "columns",
+      "results",
+      "list",
+      "rows",
+    ]) {
+      if (key in node) {
+        const found = walk(node[key], depth + 1);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  return walk(res, 0) ?? [];
+};
+
+const toModelName = (tableName: string) =>
+  tableName
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter: string) => letter.toUpperCase());
+
 const fetchDatabaseModels = async () => {
   isLoadingModels.value = true;
   modelLoadError.value = null;
@@ -550,48 +624,55 @@ const fetchDatabaseModels = async () => {
       throw new Error("No tables data received from backend");
     }
 
-    const tables = tablesResponse.data || [];
-    const models: DatabaseModel[] = [];
+    const tables = extractList(tablesResponse);
+    if (tables.length === 0) {
+      console.warn(
+        "[ParsingRulesTab] /database/tables 没有解析出任何表，原始响应：",
+        tablesResponse,
+      );
+    }
 
-    for (const tableItem of tables) {
-      const tableName =
-        typeof tableItem === "object" && tableItem !== null
-          ? tableItem.table_name || tableItem.name || String(tableItem)
-          : String(tableItem);
+    // 并行请求各表字段，避免串行等待
+    const results = await Promise.all(
+      tables.map(async (tableItem: any): Promise<DatabaseModel | null> => {
+        const tableName =
+          typeof tableItem === "object" && tableItem !== null
+            ? tableItem.table_name || tableItem.name || String(tableItem)
+            : String(tableItem);
 
-      try {
-        const columnsResponse = await service.get(
-          `/database/tables/${tableName}/columns`,
-          {
-            timeout: 600000,
-          },
-        );
-        if (columnsResponse && columnsResponse.data) {
-          const fields: TargetField[] = columnsResponse.data.map((col: any) => ({
+        try {
+          const columnsResponse = await service.get(
+            `/database/tables/${tableName}/columns`,
+            { timeout: 600000 },
+          );
+          const columns = extractList(columnsResponse);
+
+          const fields: TargetField[] = columns.map((col: any) => ({
             name: col.name,
             label: col.label || col.name,
             type: col.type,
             required: col.required || false,
           }));
 
-          models.push({
+          return {
             id: tableName,
-            name: tableName
-              .replace(/_/g, " ")
-              .replace(/\b\w/g, (letter: string) => letter.toUpperCase()),
+            name: toModelName(tableName),
             description: `数据库表：${tableName}`,
-            fields: fields,
-          });
+            fields,
+          };
+        } catch (columnError) {
+          console.error(
+            `Failed to fetch columns for table ${tableName}:`,
+            columnError,
+          );
+          return null;
         }
-      } catch (columnError) {
-        console.error(
-          `Failed to fetch columns for table ${tableName}:`,
-          columnError,
-        );
-      }
-    }
+      }),
+    );
 
-    availableDatabaseModels.value = models;
+    availableDatabaseModels.value = results.filter(
+      (m): m is DatabaseModel => m !== null,
+    );
   } catch (error) {
     console.error("Failed to fetch database models:", error);
     modelLoadError.value = "无法加载数据库模型，请稍后重试";
@@ -599,6 +680,23 @@ const fetchDatabaseModels = async () => {
   } finally {
     isLoadingModels.value = false;
   }
+};
+
+/**
+ * 下拉选项 = 已加载的模型 + 已选中但不在列表里的模型。
+ * 这样即使模型列表加载失败 / id 对不上，已保存的选择也不会"消失"。
+ */
+const modelOptionsFor = (state: StepState): DatabaseModel[] => {
+  const known = new Set(availableDatabaseModels.value.map((m) => m.id));
+  const missing = state.modelIds
+    .filter((id) => !known.has(id))
+    .map<DatabaseModel>((id) => ({
+      id,
+      name: toModelName(id),
+      description: "未在模型列表中找到",
+      fields: [],
+    }));
+  return [...availableDatabaseModels.value, ...missing];
 };
 
 onMounted(() => {
@@ -628,7 +726,7 @@ const toggleDropdown = (
     state.activeDropdownTarget = null;
   } else {
     state.activeDropdownTarget = dropdownKey;
-    state.searchKeyword = ""; // 💡 確保每次打開時搜尋關鍵字為空
+    state.searchKeyword = ""; // 确保每次打开时搜索关键字为空
   }
 };
 
@@ -669,7 +767,7 @@ const selectSourceField = (
   state.customMode[target] = false;
   delete state.customDraft[target];
   state.activeDropdownTarget = null;
-  state.searchKeyword = ""; // 💡 選擇後清空搜尋
+  state.searchKeyword = ""; // 选择后清空搜索
   updateStepMappings(index, step, target, value, modelId);
 };
 
@@ -1259,13 +1357,13 @@ const handleManualJsonInput = (state: StepState) => {
 </script>
 
 <style scoped>
-/* 針對該搜尋輸入框強制設定背景與字體顏色，避免黑底黑字 */
+/* 搜索输入框强制设定背景与字体颜色，避免黑底黑字 */
 input[type="text"] {
   background-color: #ffffff !important;
-  color: #1f2937 !important; /* 深灰色字體 */
+  color: #1f2937 !important;
 }
 
-/* 覆蓋瀏覽器 autofill（自動填入）時的樣式 */
+/* 覆盖浏览器 autofill（自动填入）时的样式 */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
@@ -1274,17 +1372,19 @@ input:-webkit-autofill:focus {
   transition: background-color 5000s ease-in-out 0s;
 }
 
-.btn-outline {
-  padding: 4px 12px;
-  font-size: 13px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: #fff;
-  white-space: nowrap;
+/* 目标数据库模型多选框：强制浅色配色，避免深色主题下白字白底 / 深色滚动条 */
+.model-select {
+  color-scheme: light;
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
 }
-.btn-outline:hover,
-.btn-outline.is-active {
-  background: #f3f4f6;
+.model-select option {
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
+}
+.model-select option:checked {
+  background-color: #dbeafe !important;
+  color: #1e40af !important;
 }
 
 .btn-outline {
