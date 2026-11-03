@@ -1,4 +1,3 @@
-<!-- components/StepsWorkflowTab.vue -->
 <template>
   <div class="form-grid">
     <div class="form-group full-width">
@@ -9,9 +8,8 @@
 
       <!-- Draggable Step Cards -->
       <div class="steps-container">
-        <!-- @ts-ignore -->
         <Card
-          v-for="(step, index) in props.steps as Step[]"
+          v-for="(step, index) in stepList"
           :key="step.id"
           class="mb-3 step-card"
           draggable="true"
@@ -26,9 +24,7 @@
               <span class="font-medium text-gray-800"
                 >步骤 {{ index + 1 }}</span
               >
-              <!-- @ts-ignore -->
-              <!-- @ts-ignore -->
-              <span class="step-name" v-if="(step as any).name">{{ (step as any).name }}</span>
+              <span class="step-name" v-if="step.name">{{ step.name }}</span>
               <div class="ml-auto flex gap-2">
                 <Button
                   @click="$emit('duplicate', index)"
@@ -52,10 +48,8 @@
             <!-- Step Name -->
             <div class="form-group full-width mb-3">
               <Label>步骤名称</Label>
-              <!-- @ts-ignore -->
-              <!-- @ts-ignore -->
               <Input
-                v-model="(step as any).name"
+                v-model="step.name"
                 placeholder="例如: 初始请求, 详情页抓取"
               />
             </div>
@@ -63,9 +57,7 @@
             <!-- Crawl Mode Selection -->
             <div class="form-group full-width mb-3">
               <Label>爬取模式</Label>
-              <!-- @ts-ignore -->
-              <!-- @ts-ignore -->
-              <Select v-model="(step as any).mode">
+              <Select v-model="step.mode">
                 <SelectTrigger class="w-full">
                   <SelectValue placeholder="选择爬取模式..." />
                 </SelectTrigger>
@@ -77,26 +69,18 @@
             </div>
 
             <!-- API Mode Fields -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <template v-if="(step as any).mode === 'api'">
+            <template v-if="step.mode === 'api'">
               <div class="form-group full-width mb-3">
                 <Label>请求 URL</Label>
                 <Input
-                  v-model="(step as any).target_url"
+                  v-model="step.target_url"
                   placeholder="https://example.com/api/endpoint"
                 />
               </div>
 
               <div class="form-group full-width mb-3">
                 <Label>请求方式</Label>
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <Select v-model="(step as any).method">
+                <Select v-model="step.method">
                   <SelectTrigger class="w-full">
                     <SelectValue placeholder="选择请求方法..." />
                   </SelectTrigger>
@@ -111,94 +95,47 @@
 
               <div class="form-group full-width mb-3">
                 <Label>请求参数 (JSON)</Label>
-                <!-- @vue-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
                 <Textarea
-                  v-model="(step as any).params_json"
+                  v-model="step.params_json"
                   placeholder='{"param1": "value1", "param2": "value2"}'
-                  rows="4"
+                  :rows="4"
                 />
               </div>
 
               <div class="form-group full-width mb-3">
                 <Label>Headers (JSON)</Label>
-                <!-- @vue-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
                 <Textarea
-                  v-model="(step as any).headers_json"
+                  v-model="step.headers_json"
                   placeholder='{"Content-Type": "application/json"}'
-                  rows="4"
+                  :rows="4"
                 />
               </div>
             </template>
 
-            <!-- @vue-ignore -->
             <!-- Playwright Mode Fields -->
-            <!-- @vue-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
-            <template v-else-if="(step as any).mode === 'playwright'">
+            <template v-else-if="step.mode === 'playwright'">
               <div class="form-group full-width mb-3">
                 <Label>页面 URL</Label>
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
                 <Input
-                  v-model="(step as any).target_url"
+                  v-model="step.target_url"
                   placeholder="https://example.com/page"
                 />
               </div>
 
               <div class="form-group full-width mb-3">
                 <Label>等待选择器</Label>
-                <!-- @vue-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
                 <Input
-                  v-model="(step as any).wait_selector"
+                  v-model="step.wait_selector"
                   placeholder=".content-loaded, #main-content"
                 />
               </div>
 
               <div class="form-group full-width mb-3">
                 <Label>执行 JavaScript</Label>
-                <!-- @vue-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
-                <!-- @ts-ignore -->
                 <Textarea
-                  v-model="(step as any).script"
-                  placeholder="// 返回数据的函数\ndocument.querySelector('.data').textContent"
-                  rows="6"
+                  v-model="step.script"
+                  placeholder="// 返回数据的函数&#10;document.querySelector('.data').textContent"
+                  :rows="6"
                 />
               </div>
             </template>
@@ -214,8 +151,8 @@
   </div>
 </template>
 
-<!-- @vue-ignore -->
 <script setup lang="ts">
+import { computed } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -231,9 +168,7 @@ import {
 import { PlusIcon, CopyIcon, Trash2Icon } from "@lucide/vue";
 import type { Step } from "@/composables/useScraperConfig";
 
-const props = withDefaults(defineProps<{
-  steps: Step[];
-}>(), {
+const props = withDefaults(defineProps<{ steps: Step[] }>(), {
   steps: () => [],
 });
 
@@ -247,4 +182,7 @@ defineEmits([
   "dragend",
   "drop",
 ]);
+
+// 若 Step 型別尚未包含 mode / target_url 等欄位，這裡用 any[] 讓模板能直接存取
+const stepList = computed(() => props.steps as any[]);
 </script>

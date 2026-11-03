@@ -38,13 +38,13 @@ export interface MultiParserRule {
 }
 
 export interface Step {
-    id: string
-    name: string
+    id: string | number;
+    name?: string;
     mode: 'api' | 'playwright'
-    target_url: string
-    method: string
-    params_json: string
-    headers_json: string
+    target_url?: string;
+    method?: "GET" | "POST" | "PUT" | "DELETE";
+    params_json?: string;
+    headers_json?: string;
     wait_selector?: string
     script?: string
     parsing_rules: ParsingRule[] // 修改为列表形式
