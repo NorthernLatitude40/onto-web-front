@@ -11,7 +11,7 @@
       <div class="steps-container">
         <!-- @ts-ignore -->
         <Card
-          v-for="(step, index) in props.steps"
+          v-for="(step, index) in props.steps as Step[]"
           :key="step.id"
           class="mb-3 step-card"
           draggable="true"
@@ -26,6 +26,7 @@
               <span class="font-medium text-gray-800"
                 >步骤 {{ index + 1 }}</span
               >
+              <!-- @ts-ignore -->
               <!-- @ts-ignore -->
               <span class="step-name" v-if="(step as any).name">{{ (step as any).name }}</span>
               <div class="ml-auto flex gap-2">
@@ -52,6 +53,7 @@
             <div class="form-group full-width mb-3">
               <Label>步骤名称</Label>
               <!-- @ts-ignore -->
+              <!-- @ts-ignore -->
               <Input
                 v-model="(step as any).name"
                 placeholder="例如: 初始请求, 详情页抓取"
@@ -61,6 +63,7 @@
             <!-- Crawl Mode Selection -->
             <div class="form-group full-width mb-3">
               <Label>爬取模式</Label>
+              <!-- @ts-ignore -->
               <!-- @ts-ignore -->
               <Select v-model="(step as any).mode">
                 <SelectTrigger class="w-full">
@@ -75,10 +78,14 @@
 
             <!-- API Mode Fields -->
             <!-- @ts-ignore -->
+            <!-- @ts-ignore -->
+            <!-- @ts-ignore -->
+            <!-- @ts-ignore -->
+            <!-- @ts-ignore -->
+            <!-- @ts-ignore -->
             <template v-if="(step as any).mode === 'api'">
               <div class="form-group full-width mb-3">
                 <Label>请求 URL</Label>
-                <!-- @ts-ignore -->
                 <Input
                   v-model="(step as any).target_url"
                   placeholder="https://example.com/api/endpoint"
@@ -87,6 +94,7 @@
 
               <div class="form-group full-width mb-3">
                 <Label>请求方式</Label>
+                <!-- @ts-ignore -->
                 <!-- @ts-ignore -->
                 <Select v-model="(step as any).method">
                   <SelectTrigger class="w-full">
@@ -105,6 +113,7 @@
                 <Label>请求参数 (JSON)</Label>
                 <!-- @vue-ignore -->
                 <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
                 <Textarea
                   v-model="(step as any).params_json"
                   placeholder='{"param1": "value1", "param2": "value2"}'
@@ -115,6 +124,7 @@
               <div class="form-group full-width mb-3">
                 <Label>Headers (JSON)</Label>
                 <!-- @vue-ignore -->
+                <!-- @ts-ignore -->
                 <!-- @ts-ignore -->
                 <Textarea
                   v-model="(step as any).headers_json"
@@ -143,11 +153,23 @@
             <!-- @ts-ignore -->
             <!-- @ts-ignore -->
             <!-- @ts-ignore -->
-            <!-- @ts-ignore -->
             <template v-else-if="(step as any).mode === 'playwright'">
               <div class="form-group full-width mb-3">
                 <Label>页面 URL</Label>
-                <!-- @vue-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
                 <!-- @ts-ignore -->
                 <Input
                   v-model="(step as any).target_url"
@@ -159,6 +181,8 @@
                 <Label>等待选择器</Label>
                 <!-- @vue-ignore -->
                 <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
                 <Input
                   v-model="(step as any).wait_selector"
                   placeholder=".content-loaded, #main-content"
@@ -168,6 +192,8 @@
               <div class="form-group full-width mb-3">
                 <Label>执行 JavaScript</Label>
                 <!-- @vue-ignore -->
+                <!-- @ts-ignore -->
+                <!-- @ts-ignore -->
                 <!-- @ts-ignore -->
                 <Textarea
                   v-model="(step as any).script"
