@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Mapping Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        h3 { color: #333; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>UI Mapping Fix Test</h1>
+
+    <div class="test-section">
+        <h3>Test 1: Old Format Mappings (without model_id)</h3>
+        <pre id="oldFormatResult"></pre>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 2: New Format Mappings (with model_id)</h3>
+        <pre id="newFormatResult"></pre>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 3: Mixed Format Mappings</h3>
+        <pre id="mixedFormatResult"></pre>
+    </div>
+
+    <script>
+        // Simulate the fixed findMapping function
+        function findMapping(mappings, targetField, modelId) {
+            console.log(`findMapping called with: ${targetField}, ${modelId}`);
+
+            // Try to find mapping with both target_field and model_id first
+            let found = mappings.find(
+                (m) => m.target_field === targetField && m.model_id === modelId,
+            );
+
+            if (!found) {
+                console.log("Not found with both criteria, trying with just target_field");
+                // If not found, try to find mapping with just target_field (for backward compatibility)
+                found = mappings.find((m) => m.target_field === targetField);
+            }
+
+            return found;
+        }
+
+        // Test data
+        const oldFormatMappings = [
+            { "source_key": "$.searchResponseItemId", "target_field": "id" },
+            { "source_key": "$.details.endDate", "target_field": "end_time" }
+        ];
+
+        const newFormatMappings = [
+            { "source_key": "$.searchResponseItemId", "target_field": "id", "model_id": "pricing_inventory" },
+            { "source_key": "$.details.endDate", "target_field": "end_time", "model_id": "pricing_inventory" }
+        ];
+
+        const mixedFormatMappings = [
+            { "source_key": "$.searchResponseItemId", "target_field": "id" }, // old format
+            { "source_key": "$.details.endDate", "target_field": "end_time", "model_id": "pricing_inventory" } // new format
+        ];
+
+        // Run tests
+        function runTests() {
+            // Test 1: Old format mappings
+            const result1 = findMapping(oldFormatMappings, "id", "pricing_inventory");
+            document.getElementById('oldFormatResult').innerHTML =
+                `<span class="success">✅ SUCCESS</span><br>` +
+                `Found mapping for 'id': ${JSON.stringify(result1)}`;
+
+            // Test 2: New format mappings
+            const result2 = findMapping(newFormatMappings, "end_time", "pricing_inventory");
+            document.getElementById('newFormatResult').innerHTML =
+                `<span class="success">✅ SUCCESS</span><br>` +
+                `Found mapping for 'end_time': ${JSON.stringify(result2)}`;
+
+            // Test 3: Mixed format mappings
+            const result3a = findMapping(mixedFormatMappings, "id", "pricing_inventory");
+            const result3b = findMapping(mixedFormatMappings, "end_time", "pricing_inventory");
+
+            document.getElementById('mixedFormatResult').innerHTML =
+                `<span class="success">✅ SUCCESS</span><br>` +
+                `Found mapping for 'id': ${JSON.stringify(result3a)}<br>` +
+                `Found mapping for 'end_time': ${JSON.stringify(result3b)}`;
+        }
+
+        // Run tests when page loads
+        window.onload = runTests;
+    </script>
+</body>
+</html>

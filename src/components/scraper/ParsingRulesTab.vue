@@ -859,11 +859,15 @@ const updateStepMappings = (
     );
 
     if (sourceKey) {
-      filteredMappings.push({
+      const newMapping = {
         source_key: sourceKey,
         target_field: target,
-        model_id: modelId,
-      });
+      };
+      // Only add model_id if it's provided
+      if (modelId) {
+        newMapping.model_id = modelId;
+      }
+      filteredMappings.push(newMapping);
     }
 
     rules[targetRuleIndex] = {
@@ -921,9 +925,15 @@ function getMappings(step: any): Mapping[] {
 function findMapping(step: any, target: string, modelId?: string) {
   const mappings = getMappings(step);
   if (modelId) {
-    return mappings.find(
+    // Try to find mapping with both target_field and model_id first
+    let found = mappings.find(
       (m) => m.target_field === target && m.model_id === modelId,
     );
+    // If not found, try to find mapping with just target_field (for backward compatibility)
+    if (!found) {
+      found = mappings.find((m) => m.target_field === target);
+    }
+    return found;
   }
   return mappings.find((m) => m.target_field === target);
 }
@@ -1068,9 +1078,17 @@ const handleDatabaseModelChange = (
     const matchedRule =
       existingRules.find((r) => r.target_model === modelId) ||
       existingRules[idx];
-    const modelMappings = getMappings(step).filter(
-      (m) => m.model_id === modelId,
-    );
+    // Filter mappings by model_id, but also include mappings without model_id for backward compatibility
+    let modelMappings = getMappings(step).filter((m) => m.model_id === modelId);
+    if (modelMappings.length === 0) {
+      // If no mappings found with specific model_id, try to find any mapping that matches target fields
+      const matchedRule = existingRules.find((r) => r.target_model === modelId);
+      if (matchedRule && matchedRule.mappings) {
+        modelMappings = matchedRule.mappings.filter(
+          (m) => m.target_field && targetFields.includes(m.target_field),
+        );
+      }
+    }
 
     return {
       name: matchedRule?.name || `解析规则_${modelId}`,
@@ -1172,9 +1190,14 @@ const autoMapFields = (index: number, step: any, state: StepState) => {
     const nextMappings = Array.isArray(rule.mappings) ? [...rule.mappings] : [];
 
     for (const target of modelTargetFields) {
-      const existing = nextMappings.find(
+      // Try to find existing mapping with both target_field and model_id first
+      let existing = nextMappings.find(
         (m) => m.target_field === target.name && m.model_id === target.modelId,
       );
+      // If not found, try to find mapping with just target_field (for backward compatibility)
+      if (!existing) {
+        existing = nextMappings.find((m) => m.target_field === target.name);
+      }
       if (existing) continue;
 
       let best: SourceField | undefined;
