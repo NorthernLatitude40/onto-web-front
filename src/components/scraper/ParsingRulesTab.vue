@@ -534,6 +534,12 @@ interface TargetField {
   required: boolean;
 }
 
+interface FieldMapping {
+  source_key: string;
+  target_field: string;
+  model_id?: string; // Optional field for backward compatibility
+}
+
 interface DatabaseModel {
   id: string;
   name: string;
@@ -914,7 +920,7 @@ const updateStepParsingRules = (index: number, patch: Record<string, any>) => {
 function getMappings(step: any): Mapping[] {
   const rules = rulesList(step);
   const allMappings: Mapping[] = [];
-  rules.forEach((rule) => {
+  rules.forEach((rule: any) => {
     if (Array.isArray(rule.mappings)) {
       allMappings.push(...rule.mappings);
     }
@@ -927,15 +933,15 @@ function findMapping(step: any, target: string, modelId?: string) {
   if (modelId) {
     // Try to find mapping with both target_field and model_id first
     let found = mappings.find(
-      (m) => m.target_field === target && m.model_id === modelId,
+      (m: Mapping) => m.target_field === target && m.model_id === modelId,
     );
     // If not found, try to find mapping with just target_field (for backward compatibility)
     if (!found) {
-      found = mappings.find((m) => m.target_field === target);
+      found = mappings.find((m: Mapping) => m.target_field === target);
     }
     return found;
   }
-  return mappings.find((m) => m.target_field === target);
+  return mappings.find((m: Mapping) => m.target_field === target);
 }
 
 function resolveInitialModelIds(step: any): string[] {
@@ -948,14 +954,14 @@ function resolveInitialModelIds(step: any): string[] {
   }
 
   const rules = rulesList(step);
-  rules.forEach((rule) => {
+  rules.forEach((rule: any) => {
     if (rule.target_model && !modelIds.includes(rule.target_model)) {
       modelIds.push(rule.target_model);
     }
   });
 
   const mappings = getMappings(step);
-  mappings.forEach((m) => {
+  mappings.forEach((m: Mapping) => {
     if (m.model_id && !modelIds.includes(m.model_id)) {
       modelIds.push(m.model_id);
     }
@@ -1079,13 +1085,13 @@ const handleDatabaseModelChange = (
       existingRules.find((r) => r.target_model === modelId) ||
       existingRules[idx];
     // Filter mappings by model_id, but also include mappings without model_id for backward compatibility
-    let modelMappings = getMappings(step).filter((m) => m.model_id === modelId);
+    let modelMappings = getMappings(step).filter((m: Mapping) => m.model_id === modelId);
     if (modelMappings.length === 0) {
       // If no mappings found with specific model_id, try to find any mapping that matches target fields
       const matchedRule = existingRules.find((r) => r.target_model === modelId);
       if (matchedRule && matchedRule.mappings) {
         modelMappings = matchedRule.mappings.filter(
-          (m) => m.target_field && targetFields.includes(m.target_field),
+          (m: Mapping) => m.target_field && getTargetFields(state.modelIds).includes(m.target_field),
         );
       }
     }
@@ -1182,7 +1188,7 @@ const calculateSimilarityScore = (targetName: string, sourceKey: string) => {
 const autoMapFields = (index: number, step: any, state: StepState) => {
   const rules = [...rulesList(step)];
 
-  rules.forEach((rule) => {
+  rules.forEach((rule: any) => {
     const modelId = rule.target_model;
     const modelTargetFields = getTargetFields(state.modelIds).filter(
       (t) => !modelId || t.modelId === modelId,
