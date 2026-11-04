@@ -534,11 +534,7 @@ interface TargetField {
   required: boolean;
 }
 
-interface FieldMapping {
-  source_key: string;
-  target_field: string;
-  model_id?: string; // Optional field for backward compatibility
-}
+
 
 interface DatabaseModel {
   id: string;
@@ -865,7 +861,7 @@ const updateStepMappings = (
     );
 
     if (sourceKey) {
-      const newMapping = {
+      const newMapping: Mapping = {
         source_key: sourceKey,
         target_field: target,
       };
@@ -1091,7 +1087,10 @@ const handleDatabaseModelChange = (
       const matchedRule = existingRules.find((r) => r.target_model === modelId);
       if (matchedRule && matchedRule.mappings) {
         modelMappings = matchedRule.mappings.filter(
-          (m: Mapping) => m.target_field && getTargetFields(state.modelIds).includes(m.target_field),
+          (m: Mapping) => {
+            const targetFieldNames = getTargetFields(state.modelIds).map(f => f.name);
+            return m.target_field && targetFieldNames.includes(m.target_field);
+          },
         );
       }
     }
